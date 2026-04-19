@@ -1,0 +1,50 @@
+id: vm-template-catalog
+title: VM Template Catalog Statechart
+source_flow: ../ui-flows/vm-template-catalog.yaml
+rbac_ref: ../rbac.yaml
+
+context:
+  role: null
+  tenantId: null
+  searchTerm: ""
+  selectedTemplateId: null
+  drawerOpen: false
+
+initial: vmc_catalog_grid
+
+states:
+  vmc_catalog_grid:
+    permissions:
+      - view_catalog
+      - create_from_template
+    on:
+      OPEN_FROM_TENANT_USER_NAV:
+        target: vmc_catalog_grid
+        guard: can(role, "view_catalog")
+      OPEN_FROM_TENANT_ADMIN_NAV:
+        target: vmc_catalog_grid
+        guard: can(role, "view_catalog")
+      INVOKE_CREATE_FROM_TEMPLATE:
+        target: cvm_wizard_template
+        guard: can(role, "create_from_template")
+      RESELECT_TEMPLATE_NAV:
+        target: vmc_catalog_grid
+        guard: can(role, "view_catalog")
+
+  vmc_catalog_provider_global:
+    permissions:
+      - manage_global_templates
+      - create_from_template
+    on:
+      INVOKE_CREATE_FROM_TEMPLATE:
+        target: cvm_wizard_template
+        guard: can(role, "create_from_template")
+
+  cvm_wizard_template:
+    external: create-virtual-machine-wizard.statechart.yaml#cvm_wizard_template
+
+ai-hints:
+  summary: >-
+    Template browsing and create-from-template initiation machine for tenant and provider contexts.
+  impossibleStates:
+    - role=tenantUser and state=vmc_catalog_provider_global

@@ -1,0 +1,782 @@
+# Backend API specification for OSAC demo ↔ fulfillment-service alignment
+# Source repo: https://github.com/osac-project/fulfillment-service
+# Proto revision basis: main branch (analyzed 2026-04-17). Open PRs may extend contracts.
+
+agent:
+  name: backend-spec-generator
+  version: 1.0
+  description: >
+    Generate production-ready backend API specifications based on product flows,
+    UI components, and business requirements. Output must be deterministic,
+    structured, and aligned with frontend contracts.
+
+context:
+  product:
+    name: OSAC fulfillment service (demo consumer)
+    domain: Cloud-in-a-box / edge VM and cluster provisioning
+    description: >
+      Go service exposing gRPC (osac.public.v1 / osac.private.v1) and a gRPC-Gateway
+      REST surface under /api/fulfillment/v1 (public) plus /api/private/v1 (private).
+      PostgreSQL persistence; OpenShift deployment uses Bearer tokens (Kubernetes SA JWT).
+
+  source_repository:
+    url: https://github.com/osac-project/fulfillment-service
+    license: Apache-2.0
+    primary_languages:
+      - Go
+
+  architecture:
+    style: modular monolith (single deployable; gRPC + REST gateway + controller)
+    api_style: REST (JSON via grpc-gateway) + gRPC (internal / advanced clients)
+    rest_base_paths:
+      public: /api/fulfillment/v1
+      capabilities: /api/fulfillment/v1/capabilities
+      events_watch: /api/events/v1/events
+      console_access: /api/osac/public/v1/console
+      private: /api/private/v1
+    auth:
+      type: OAuth2 / Bearer JWT (Keycloak / Authorino in cluster integrations)
+      roles:
+        - system
+        - provider_admin
+        - tenant_admin
+        - tenant_user
+        - viewer
+    json_conventions:
+      field_names: lowerCamelCase
+      enums: PROTO_JSON (e.g. COMPUTE_INSTANCE_STATE_RUNNING)
+      well_known_types: google.protobuf wrappers as documented in compute_instance_type.proto
+
+  open_pull_requests_snapshot:
+    fetched_at: "2026-04-17"
+    note: >
+      Titles only; merge may change contracts. PR #421 fixes partial PATCH semantics
+      (preserve absent optional fields; FieldMask for explicit clears)—treat as the
+      intended Update behavior for demo clients once merged.
+    items:
+      - number: 421
+        title: "MGMT-23918: Fix Update without FieldMask clearing optional spec fields"
+      - number: 420
+        title: "MGMT-23970: fix blank TEMPLATE and HUB columns in ComputeInstance table output"
+      - number: 419
+        title: "NO-ISSUE: Display identifier if object doesn't have a name"
+      - number: 418
+        title: "MGMT-23786: Add users and access key APIs"
+      - number: 417
+        title: "MGMT-23785: Create Organizations server and hook in Organization management through Keycloak"
+      - number: 416
+        title: "MGMT-23941: Add explicit ClusterSpec fields for cluster configuration"
+      - number: 414
+        title: "MGMT-23769: Provide up front validation and handling of template prov…"
+      - number: 338
+        title: "MGMT-23543: Add template inheritance"
+
+  private_api_surface:
+    description: >
+      Package osac.private.v1 mirrors many public resources for controllers and
+      platform automation. HTTP routes use /api/private/v1/<resource> with the same
+      verbs where annotated. Additional private-only domains include hubs, leases,
+      and public IP pools (no matching public REST in main tree at analysis time).
+    demo_ui_policy: >
+      Browser-based demo MUST NOT call private REST unless explicitly running as
+      a platform operator with appropriate network policy and credentials.
+
+  frontend_alignment:
+    source: Projects/osac-demo/specs (FLOW-INDEX + ui-flows/*.yaml)
+    components:
+      - name: InstitutionalSignIn
+        description: Trusted token issuers for IdP hints (VITE_FULFILLMENT_API_URL).
+        data_requirements:
+          - authn.trustedTokenIssuers[].issuerUrl (or equivalent from Capabilities)
+      - name: VmTemplateCatalog
+        description: Gallery of VM/cluster templates by scope.
+        data_requirements:
+          - clusterTemplate.id
+          - clusterTemplate.title
+          - clusterTemplate.description
+      - name: CreateVirtualMachineWizard
+        description: New / template / clone paths; maps to compute instance spec fields.
+        data_requirements:
+          - computeInstanceTemplate.id
+          - computeInstance.spec.template
+          - computeInstance.spec.templateParameters
+          - computeInstance.spec.cores
+          - computeInstance.spec.memoryGib
+          - computeInstance.spec.image
+          - computeInstance.spec.bootDisk
+          - computeInstance.spec.subnet
+          - computeInstance.spec.securityGroups
+          - computeInstance.spec.runStrategy
+          - computeInstance.spec.restartRequestedAt
+      - name: ManageVirtualMachines
+        description: List, filter, power lifecycle, detail, console gating.
+        data_requirements:
+          - computeInstance.id
+          - computeInstance.metadata.name
+          - computeInstance.status.state
+          - computeInstance.status.conditions
+          - computeInstance.status.ipAddress
+          - console.available + console.supportedTypes
+      - name: RecentActivityList
+        description: Activity feed; combine Events watch with object hydration.
+        data_requirements:
+          - event.type
+          - event.timestamp
+          - event.relatedObjectRefs
+      - name: TenantAdministration_NetworkTopology
+        description: VN / subnet / VM linkage for topology handoff.
+        data_requirements:
+          - virtualNetwork.id
+          - subnet.id
+          - computeInstance.id + subnet binding
+
+  flows:
+    - name: institutional-sign-in
+      description: Discover OIDC issuers before interactive login.
+      steps:
+        - GET /api/fulfillment/v1/capabilities (unauthenticated)
+        - Client obtains access token from chosen issuer (out of band for this spec)
+        - Subsequent calls include Authorization Bearer
+    - name: vm-template-catalog
+      description: Browse templates available to the tenant or provider.
+      steps:
+        - GET /api/fulfillment/v1/cluster_templates?filter=&order=&offset=&limit=
+        - GET /api/fulfillment/v1/cluster_templates/{id}
+        - Optional GET /api/fulfillment/v1/compute_instance_templates for VM-specific catalogs
+    - name: create-virtual-machine-wizard
+      description: Compose desired state then submit for asynchronous fulfillment.
+      steps:
+        - Resolve template GET /api/fulfillment/v1/compute_instance_templates/{id}
+        - POST /api/fulfillment/v1/compute_instances (see contract_note below) OR platform-managed create
+        - Poll GET /api/fulfillment/v1/compute_instances/{id} until status reflects RUNNING or FAILED
+    - name: manage-virtual-machines
+      description: Operate lifecycle on existing compute instances.
+      steps:
+        - GET /api/fulfillment/v1/compute_instances with CEL filter for name/state
+        - PATCH /api/fulfillment/v1/compute_instances/{id} with status.runStrategy or spec fields
+        - GET /api/osac/public/v1/console/COMPUTE_INSTANCE_RESOURCE_TYPE_COMPUTE_INSTANCE/{id}/access
+    - name: recent-activities
+      description: Stream or poll domain events (SSE/WebSocket mapping depends on gateway).
+      steps:
+        - GET /api/events/v1/events?filter= (long-lived; reconnect with backoff)
+        - Correlate with GETs on affected objects
+    - name: tenant-administration
+      description: Tenant-scoped networking and org metadata.
+      steps:
+        - GET/PATCH /api/fulfillment/v1/virtual_networks
+        - GET/PATCH /api/fulfillment/v1/subnets
+        - GET/PATCH /api/fulfillment/v1/security_groups
+        - GET /api/fulfillment/v1/organizations/{tenantId}
+    - name: provider-administration
+      description: Cross-tenant inventory; same endpoints with broader authz.
+      steps:
+        - GET /api/fulfillment/v1/organizations?filter=
+        - GET /api/fulfillment/v1/clusters (provider visibility)
+    - name: vm-console-standalone-demo
+      description: Check console availability before opening serial/VNC session.
+      steps:
+        - GET console access endpoint
+        - gRPC bidi Connect(stream) for real I/O (not exposed as REST)
+
+requirements:
+  functional:
+    - List collections support offset, limit, optional CEL filter, optional SQL-like order string.
+    - Updates use PATCH with body field presence driving implicit FieldMask in HTTP+JSON.
+    - Optimistic concurrency via optional lock comparing metadata.version when enabled.
+    - Regular users must not bypass policy; respect comments on restricted RPCs in protos.
+    - Capabilities endpoint is unauthenticated and safe for pre-login discovery.
+  non_functional:
+    performance: p95 read list < 500ms for modest page sizes under normal load
+    scalability: horizontally scaled stateless gateway; DB-backed consistency
+    security: TLS everywhere in production; Bearer auth; tenant isolation via authz layer
+    observability: true
+
+contract_note_compute_instance_create: >
+  Proto comments state POST /compute_instances is not for regular end users; users
+  should create via an order/async path. The historical README still mentions
+  ClusterOrders gRPC services; main-branch public protos analyzed here expose
+  ComputeInstances CRUD but with that restriction. Demo implementations should use
+  mock/local create OR a documented platform-only token until a public order API ships.
+
+instructions:
+  - Generate API endpoints per flow and component needs
+  - Ensure each endpoint maps to a clear business capability
+  - Include request/response schemas with types
+  - Define validation rules and error responses
+  - Align naming conventions across endpoints
+  - Reuse entities where possible (DRY principle)
+  - Include pagination, filtering, and sorting where relevant
+  - Apply authentication and role-based access control
+  - Ensure APIs are frontend-consumable and predictable
+
+output_format:
+  type: openapi-like
+  include:
+    - endpoints
+    - methods
+    - request_schema
+    - response_schema
+    - error_codes
+    - auth_rules
+    - example_requests
+    - example_responses
+
+output_constraints:
+  naming: lowerCamelCase in JSON bodies and query params aligned to grpc-gateway
+  avoid_redundant_endpoints: true
+  read_vs_write: clearly separated by HTTP verb
+  edge_cases: included under each_api.errors
+
+reusable_schemas:
+  PageOfT:
+    type: object
+    properties:
+      size:
+        type: integer
+        format: int32
+      total:
+        type: integer
+        format: int32
+      items:
+        type: array
+        items:
+          type: object
+  ListQuery:
+    type: object
+    properties:
+      offset:
+        type: integer
+        format: int32
+      limit:
+        type: integer
+        format: int32
+      filter:
+        type: string
+        description: CEL expression; see docs/FILTER.md in fulfillment-service
+      order:
+        type: string
+        description: Attribute names from resource model; SQL-like asc/desc
+  Metadata:
+    type: object
+    description: See osac/public/v1/metadata_type.proto
+    properties:
+      name:
+        type: string
+      version:
+        type: integer
+        format: int64
+      labels:
+        type: object
+        additionalProperties:
+          type: string
+      createdAt:
+        type: string
+        format: date-time
+  ClusterTemplateSummary:
+    type: object
+    properties:
+      id:
+        type: string
+      title:
+        type: string
+      description:
+        type: string
+  ClusterTemplate:
+    allOf:
+      - $ref: "#/reusable_schemas/ClusterTemplateSummary"
+      - type: object
+        properties:
+          metadata:
+            $ref: "#/reusable_schemas/Metadata"
+          spec:
+            type: object
+          status:
+            type: object
+  ComputeInstance:
+    type: object
+    properties:
+      id:
+        type: string
+      metadata:
+        $ref: "#/reusable_schemas/Metadata"
+      spec:
+        type: object
+        properties:
+          template:
+            type: string
+          templateParameters:
+            type: object
+            additionalProperties: true
+          cores:
+            type: integer
+          memoryGib:
+            type: integer
+          image:
+            type: object
+          bootDisk:
+            type: object
+          additionalDisks:
+            type: array
+            items:
+              type: object
+          runStrategy:
+            type: string
+          sshKey:
+            type: string
+          userData:
+            type: string
+          subnet:
+            type: string
+          securityGroups:
+            type: array
+            items:
+              type: string
+          restartRequestedAt:
+            type: string
+            format: date-time
+      status:
+        type: object
+        properties:
+          state:
+            type: string
+          conditions:
+            type: array
+            items:
+              type: object
+          ipAddress:
+            type: string
+          lastRestartedAt:
+            type: string
+            format: date-time
+
+apis:
+  - name: capabilities_get
+    description: Server authn capabilities including trusted token issuers (pre-login).
+    endpoint: /api/fulfillment/v1/capabilities
+    method: GET
+    auth:
+      required: false
+      roles_allowed: []
+    request:
+      schema:
+        type: object
+        properties: {}
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties:
+            authn:
+              type: object
+      errors:
+        - code: 500_INTERNAL
+          description: Transient server failure
+    example_requests:
+      - |
+        curl -sS https://fulfillment.example/api/fulfillment/v1/capabilities
+    example_responses:
+      - |
+        { "authn": { "trustedTokenIssuers": [ { "issuerUrl": "https://idp.example/realms/osac" } ] } }
+
+  - name: cluster_templates_list
+    description: List VM/cluster templates visible to the caller.
+    endpoint: /api/fulfillment/v1/cluster_templates
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          allOf:
+            - $ref: "#/reusable_schemas/PageOfT"
+            - properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/reusable_schemas/ClusterTemplateSummary"
+      errors:
+        - code: 401_UNAUTHORIZED
+          description: Missing or invalid bearer token
+        - code: 403_FORBIDDEN
+          description: Insufficient scope for template visibility
+    example_requests:
+      - |
+        curl -sS -H "Authorization: Bearer $TOKEN" \
+          'https://fulfillment.example/api/fulfillment/v1/cluster_templates?limit=20'
+    example_responses:
+      - |
+        { "size": 2, "total": 2, "items": [ { "id": "my-template", "title": "My template" } ] }
+
+  - name: cluster_templates_get
+    description: Fetch one template by id.
+    endpoint: /api/fulfillment/v1/cluster_templates/{id}
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+            required: true
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/ClusterTemplate"
+      errors:
+        - code: 404_NOT_FOUND
+          description: Unknown template id
+    example_requests:
+      - |
+        curl -sS -H "Authorization: Bearer $TOKEN" \
+          https://fulfillment.example/api/fulfillment/v1/cluster_templates/my-template
+
+  - name: compute_instance_templates_list
+    description: List compute instance (VM) templates for wizard catalog steps.
+    endpoint: /api/fulfillment/v1/compute_instance_templates
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: compute_instances_list
+    description: My VMs list with CEL filtering (name prefix, state, etc.).
+    endpoint: /api/fulfillment/v1/compute_instances
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+          - properties:
+              filter:
+                example: this.metadata.name.startsWith("demo-")
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties:
+            size:
+              type: integer
+            total:
+              type: integer
+            items:
+              type: array
+              items:
+                $ref: "#/reusable_schemas/ComputeInstance"
+      errors:
+        - code: 400_BAD_REQUEST
+          description: Malformed filter or order expression
+
+  - name: compute_instances_get
+    description: VM detail drawer primary payload.
+    endpoint: /api/fulfillment/v1/compute_instances/{id}
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+            required: true
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/ComputeInstance"
+      errors:
+        - code: 404_NOT_FOUND
+          description: Unknown compute instance
+
+  - name: compute_instances_create
+    description: Create compute instance (subject to proto policy / platform-only).
+    endpoint: /api/fulfillment/v1/compute_instances
+    method: POST
+    auth:
+      required: true
+      roles_allowed: [system, provider_admin]
+    request:
+      schema:
+        type: object
+        required: [object]
+        properties:
+          object:
+            $ref: "#/reusable_schemas/ComputeInstance"
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties:
+            object:
+              $ref: "#/reusable_schemas/ComputeInstance"
+      errors:
+        - code: 403_FORBIDDEN
+          description: End user attempted direct create
+        - code: 409_CONFLICT
+          description: Name or id collision
+
+  - name: compute_instances_update
+    description: Partial update; omitted optionals preserved once PR421 behavior is active.
+    endpoint: /api/fulfillment/v1/compute_instances/{id}
+    method: PATCH
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, system]
+    request:
+      schema:
+        type: object
+        description: Body is ComputeInstance; only set fields participate in implicit mask.
+        properties:
+          metadata:
+            $ref: "#/reusable_schemas/Metadata"
+          spec:
+            type: object
+          status:
+            type: object
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties:
+            object:
+              $ref: "#/reusable_schemas/ComputeInstance"
+      errors:
+        - code: 412_PRECONDITION_FAILED
+          description: lock=true and metadata.version mismatch
+    example_requests:
+      - |
+        curl -sS -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          https://fulfillment.example/api/fulfillment/v1/compute_instances/123 \
+          -d '{"status":{"state":"COMPUTE_INSTANCE_STATE_STOPPED"}}'
+
+  - name: compute_instances_delete
+    description: Delete VM (async deleting state may appear in status).
+    endpoint: /api/fulfillment/v1/compute_instances/{id}
+    method: DELETE
+    auth:
+      required: true
+      roles_allowed: [tenant_admin, provider_admin, system]
+    request:
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+            required: true
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties: {}
+
+  - name: console_get_access
+    description: Whether console is available for a compute instance without opening stream.
+    endpoint: /api/osac/public/v1/console/{resourceType}/{resourceId}/access
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        type: object
+        properties:
+          resourceType:
+            type: string
+            enum:
+              - CONSOLE_RESOURCE_TYPE_COMPUTE_INSTANCE
+              - CONSOLE_RESOURCE_TYPE_HOST
+          resourceId:
+            type: string
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          properties:
+            available:
+              type: boolean
+            reason:
+              type: string
+            supportedTypes:
+              type: array
+              items:
+                type: string
+      errors:
+        - code: 404_NOT_FOUND
+          description: Unknown resource
+
+  - name: events_watch
+    description: Long-lived event stream for activity feed (client must tolerate gaps).
+    endpoint: /api/events/v1/events
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        type: object
+        properties:
+          filter:
+            type: string
+            description: CEL on event object
+    response:
+      success:
+        status: 200
+        schema:
+          type: object
+          description: Streaming framing depends on deployment (SSE vs chunked JSON)
+
+  - name: virtual_networks_crud
+    description: Tenant network scope for topology and VM attachment.
+    endpoint: /api/fulfillment/v1/virtual_networks
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: subnets_crud
+    description: Subnets for VM spec.subnet references.
+    endpoint: /api/fulfillment/v1/subnets
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: security_groups_crud
+    description: Attachable firewall policy objects for compute instances.
+    endpoint: /api/fulfillment/v1/security_groups
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [tenant_user, tenant_admin, provider_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: organizations_list_get
+    description: Directory of tenant organizations for provider admin and org metadata.
+    endpoint: /api/fulfillment/v1/organizations
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [provider_admin, tenant_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: clusters_list_get
+    description: Managed clusters inventory (kubeconfig/password are separate routes).
+    endpoint: /api/fulfillment/v1/clusters
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [provider_admin, tenant_admin, viewer]
+    request:
+      schema:
+        allOf:
+          - $ref: "#/reusable_schemas/ListQuery"
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/PageOfT"
+
+  - name: private_compute_instances_signal
+    description: >
+      gRPC-only Signal on private ComputeInstances (no google.api.http). Controllers
+      use this to request reconciliation; not for browser clients.
+    endpoint: osac.private.v1.ComputeInstances/Signal
+    method: GRPC
+    auth:
+      required: true
+      roles_allowed: [system]
+    request:
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+    response:
+      success:
+        status: 0
+        schema:
+          type: object
+          properties: {}
+
+  - name: private_rest_mirror_example
+    description: Example private REST mirror for automation (subset of full private API).
+    endpoint: /api/private/v1/compute_instances/{id}
+    method: GET
+    auth:
+      required: true
+      roles_allowed: [system]
+    request:
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+            required: true
+    response:
+      success:
+        status: 200
+        schema:
+          $ref: "#/reusable_schemas/ComputeInstance"

@@ -1,0 +1,148 @@
+flow: Welcome and role selection
+statechart_ref: ../statecharts/welcome-and-role-selection.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    wrs_welcome_landing:
+      enter_provider_admin: choose_persona
+      open_tenant_user_new_tab: choose_persona
+      open_tenant_admin_new_tab: choose_persona
+      toggle_theme: use_theme_toggle
+    wrs_role_selected_pre_auth:
+      proceed_to_sign_in: choose_persona
+
+terminology:
+  provider_admin: >-
+    UI label "Provider Admin" — service provider / platform operator console (Vertexa tenant
+    context in the prototype). Stakeholders may say "SP Admin"; treat as the same persona.
+  tenant_org_cards: >-
+    Northstar Bank and Bluestone Financial Group simulate separate customer tenants. Internal
+    demo tenant ids are northstar and evergreen (osac-entry slugs use evergreen-* for Bluestone).
+
+entry_bootstrap:
+  description: >-
+    Tenant org flows opened from the welcome page use a new browser tab. The new tab URL
+    carries query param osac-entry so the app can set tenant and role before sign-in.
+    After first load the app removes osac-entry from the address bar via replaceState.
+    Implementation opens the new tab with window.open(url, "_blank", "noopener,noreferrer");
+    the originating tab stays on the welcome page.
+  query_param: osac-entry
+  allowed_values:
+    - northstar-user
+    - northstar-admin
+    - evergreen-user
+    - evergreen-admin
+  unknown_value_behavior: ignore; welcome landing unchanged if invalid
+
+routing_matrix:
+  - choice: Provider Admin — Enter
+    browser_target: same_tab
+    tenant_id: vertexa
+    role: providerAdmin
+    next_step: wrs_role_selected_pre_auth
+    then: auth_sign_in_form
+  - choice: Northstar Bank — User
+    browser_target: new_tab
+    tenant_id: northstar
+    role: tenantUser
+    osac_entry: northstar-user
+    next_step: auth_sign_in_form
+  - choice: Northstar Bank — Admin
+    browser_target: new_tab
+    tenant_id: northstar
+    role: tenantAdmin
+    osac_entry: northstar-admin
+    next_step: auth_sign_in_form
+  - choice: Bluestone Financial Group — User
+    browser_target: new_tab
+    tenant_id: evergreen
+    role: tenantUser
+    osac_entry: evergreen-user
+    next_step: auth_sign_in_form
+  - choice: Bluestone Financial Group — Admin
+    browser_target: new_tab
+    tenant_id: evergreen
+    role: tenantAdmin
+    osac_entry: evergreen-admin
+    next_step: auth_sign_in_form
+
+steps:
+  - id: wrs_welcome_landing
+    title: Welcome to OSAC
+    goal: Choose provider console or a tenant organization entry persona (user vs admin) for the demo.
+
+    content:
+      heading_h1: Welcome to OSAC
+      lede: Choose the provider console or an organization, then sign in as a user or admin.
+      demo_alert:
+        title: Demo entry — not a customer sign-in page
+        body_paragraphs:
+          - >-
+            This screen is for booth operators to pick a persona. In production, end users open
+            their organization-branded URL (for example Northstar Bank or Bluestone Financial Group)
+            and sign in through the identity provider the cloud administrator configured during onboarding.
+          - >-
+            Each organization card below simulates a separate tenant so you can show multi-tenant
+            isolation in the VM workspace.
+      provider_card:
+        title: Provider Admin
+        copy: Manage platform services, tenants, and global policies for the OSAC environment.
+        primary_action_label: Enter
+      org_card_copy: >-
+        User opens the VM-as-a-Service workspace. Admin opens tenant administration for this organization.
+
+    ui:
+      components:
+        - PageLayout
+        - Alert
+        - Card
+        - Button
+        - ThemeToggle
+
+    states:
+      - ready
+      - theme_light
+      - theme_dark
+
+    interactions:
+      - Click Enter on Provider Admin card to select provider persona and Vertexa tenant context in this same tab.
+      - Click User on Northstar Bank or Bluestone Financial Group to open a new browser tab with osac-entry set for that tenant and tenant user role; this tab remains on the welcome page.
+      - Click Admin on an organization card to open a new browser tab with osac-entry set for that tenant and tenant admin role; this tab remains on the welcome page.
+      - Toggle landing light/dark theme.
+
+  - id: wrs_role_selected_pre_auth
+    title: Institution and persona locked (pre-auth) — same tab only
+    goal: >-
+      In the current tab only: application holds selectedDemoTenant, demoShellRole, and
+      default nav target before sign-in. Used for Provider Admin (Vertexa) path only;
+      tenant org selections do not use this step in the original tab because they open a new tab.
+
+    ui:
+      components:
+        - StateOnly
+
+    states:
+      - provider_admin_vertexa
+
+    interactions:
+      - Implicit when provider admin Enter completes in the same tab.
+
+transitions:
+  - from: wrs_welcome_landing
+    action: click provider admin enter (same tab)
+    browser_target: same_tab
+    to: wrs_role_selected_pre_auth
+  - from: wrs_welcome_landing
+    action: click organization user on northstar or bluestone card (new tab)
+    browser_target: new_tab
+    to: auth_sign_in_form
+  - from: wrs_welcome_landing
+    action: click organization admin on northstar or bluestone card (new tab)
+    browser_target: new_tab
+    to: auth_sign_in_form
+  - from: wrs_role_selected_pre_auth
+    action: route to institutional sign-in screen (same tab)
+    browser_target: same_tab
+    to: auth_sign_in_form
+
+validation_rules: []

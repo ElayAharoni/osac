@@ -1,0 +1,138 @@
+flow: Manage virtual machines
+statechart_ref: ../statecharts/manage-virtual-machines.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    mvm_list_view:
+      view_vm_list: view_my_vms
+      run_power_actions: operate_vm_power
+      start_clone: clone_vm
+      open_vm_detail: view_my_vms
+    mvm_detail_drawer:
+      view_vm_detail: view_my_vms
+      perform_power_action: operate_vm_power
+      launch_console: launch_console
+    mvm_topology_handoff:
+      open_vm_from_topology: open_vm_from_topology
+
+steps:
+  - id: mvm_list_view
+    title: My VMs list
+    goal: View search filter and sort VM cards or table; open detail; trigger power actions or clone.
+
+    ui:
+      components:
+        - PageSection
+        - Title
+        - SearchInput
+        - ToggleGroup
+        - Gallery
+        - Table
+        - Dropdown
+        - Button
+        - Label
+
+    states:
+      - ready
+      - loading
+      - empty_no_vms
+      - error_load_failed
+      - success_populated
+      - filtered_empty
+      - power_filter_applied_from_dashboard
+      - created_filter_applied_after_provision
+      - list_view_mode_cards
+      - list_view_mode_table
+
+    interactions:
+      - Toggle list versus card layout.
+      - Search by VM name substring.
+      - Open row or card actions menu for start stop restart clone.
+      - Select VM to open detail drawer or full detail view.
+      - Re-select My VMs nav to return from detail to list.
+
+  - id: mvm_detail_drawer
+    title: Virtual machine detail
+    goal: Inspect overview networking storage conditions console snapshot and launch console demo when running.
+
+    ui:
+      components:
+        - Drawer
+        - Breadcrumb
+        - Tabs
+        - Card
+        - DescriptionList
+        - Alert
+        - Button
+        - VmGuestDesktopSnapshot
+
+    states:
+      - ready
+      - loading
+      - error_vm_not_found
+      - success_populated
+      - power_action_pending
+      - guest_os_running
+      - guest_os_stopped
+      - guest_os_paused
+      - console_unavailable_stopped
+      - console_unavailable_paused
+      - console_launch_enabled
+
+    interactions:
+      - Navigate tabs within detail.
+      - Trigger start stop restart with simulated pending then settled state.
+      - Stop from UI updates console stop reason override until next start.
+      - Click Launch console when running to open vcd_console_demo in new query param route or window behavior per implementation.
+      - Close detail or breadcrumb back to list.
+
+  - id: mvm_topology_handoff
+    title: Open VM detail from network topology
+    goal: Tenant admin networks topology selects VM to jump tenant user My VMs list with detail open request.
+
+    ui:
+      components:
+        - NetworkTopologyPage
+        - HandoffState
+
+    states:
+      - request_pending
+      - detail_open_consumed
+
+    interactions:
+      - Click VM node in topology when handler wired to openVirtualMachineDetailFromTopology.
+
+transitions:
+  - from: tud_dashboard_home
+    action: click stat card navigating with optional power filter
+    to: mvm_list_view
+  - from: shell_primary_workspace
+    action: select My VMs nav
+    to: mvm_list_view
+  - from: mvm_list_view
+    action: select a virtual machine row or card
+    to: mvm_detail_drawer
+  - from: mvm_detail_drawer
+    action: close detail or navigate back
+    to: mvm_list_view
+  - from: mvm_list_view
+    action: choose clone from actions
+    to: cvm_wizard_source_clone
+  - from: cvm_wizard_review_create
+    action: provision success
+    to: mvm_list_view
+  - from: tad_networks_topology
+    action: open vm detail from topology graph
+    to: mvm_topology_handoff
+  - from: mvm_topology_handoff
+    action: shell switches to My VMs and consumes open request
+    to: mvm_detail_drawer
+  - from: mvm_detail_drawer
+    action: launch console while running opens new tab with demo query
+    to: vcd_console_page
+
+validation_rules:
+  - field: clone_new_name
+    rules:
+      - rule: trim_fallback_to_default_suffix
+        note: Clone path uses trimmed name or falls back to source name plus clone suffix in provisionVmCloneFromModal.

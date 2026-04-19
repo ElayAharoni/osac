@@ -1,0 +1,340 @@
+flow: Create virtual machine wizard
+statechart_ref: ../statecharts/create-virtual-machine-wizard.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    cvm_modal_closed:
+      open_from_dashboard: open_create_vm
+      open_from_catalog_template: create_from_template
+      open_from_clone_source: clone_vm
+    cvm_modal_open:
+      use_wizard_shell: use_vm_wizard
+    cvm_wizard_deployment_details:
+      choose_deployment_method: use_vm_wizard
+    cvm_wizard_guest_os:
+      select_guest_os: use_vm_wizard
+    cvm_wizard_boot_source:
+      select_boot_source: use_vm_wizard
+    cvm_wizard_compute:
+      define_compute: use_vm_wizard
+    cvm_wizard_template:
+      select_template: create_from_template
+    cvm_wizard_source_clone:
+      choose_clone_source: clone_vm
+    cvm_wizard_customization:
+      customize_vm: use_vm_wizard
+    cvm_wizard_review_create:
+      review_and_provision: provision_vm
+
+steps:
+  - id: cvm_modal_closed
+    title: Create VM entry points idle
+    goal: Modal is not shown; user may open it from dashboard button or catalog or clone action.
+
+    ui:
+      components:
+        - Button
+        - Modal
+
+    states:
+      - closed
+      - open_impending
+
+    interactions:
+      - Trigger open from dashboard Create virtual machine.
+      - Trigger openFromCatalogTemplate from catalog.
+      - Trigger openFromCloneSource from VM actions.
+
+  - id: cvm_modal_open
+    title: Create virtual machine modal with wizard
+    goal: Host PatternFly Wizard for provision paths new template or clone.
+
+    ui:
+      components:
+        - Modal
+        - Wizard
+        - WizardHeader
+        - WizardFooter
+
+    states:
+      - open
+      - wizard_step_active
+      - submitting
+      - error_provision
+      - success_provision
+
+    interactions:
+      - Close modal via footer close or header close to discard in-progress wizard state reset on reopen.
+
+  - id: cvm_wizard_deployment_details
+    title: Select a creation method
+    goal: Choose new VM from scratch from template or clone from existing VM.
+
+    ui:
+      components:
+        - WizardStep
+        - Card
+        - Form
+
+    states:
+      - editing
+      - validation_error_none_selected
+      - success_method_selected
+
+    interactions:
+      - Select one deployment method card radio.
+      - Click Next when method selected.
+
+  - id: cvm_wizard_guest_os
+    title: Guest operating system
+    goal: Pick OS family and specific OS type for new VM path only.
+
+    ui:
+      components:
+        - WizardStep
+        - Card
+        - Form
+        - FormSelect
+
+    states:
+      - hidden_when_not_new
+      - editing
+      - validation_error_family_or_type_missing
+      - success_selection_complete
+
+    interactions:
+      - Select guest OS family card then OS type from select.
+      - Click Next when both family and type set.
+
+  - id: cvm_wizard_boot_source
+    title: Boot source
+    goal: Choose boot volume or no boot source for new VM path.
+
+    ui:
+      components:
+        - WizardStep
+        - Form
+        - Radio
+
+    states:
+      - hidden_when_not_new
+      - editing
+      - validation_error_no_choice
+      - success_choice_selected
+
+    interactions:
+      - Select boot volume or no boot source radio.
+      - Click Next when choice selected.
+
+  - id: cvm_wizard_compute
+    title: Compute resources
+    goal: Enter vCPU and memory strings for new VM path.
+
+    ui:
+      components:
+        - WizardStep
+        - Form
+        - TextInput
+
+    states:
+      - hidden_when_not_new
+      - editing
+      - validation_error_cpu_or_memory_blank
+      - success_inputs_non_blank
+
+    interactions:
+      - Edit vCPU and memory fields non-empty required for Next.
+
+  - id: cvm_wizard_template
+    title: Templates
+    goal: Search filter and select a catalog template for template path.
+
+    ui:
+      components:
+        - WizardStep
+        - SearchInput
+        - Dropdown
+        - Gallery
+        - Card
+
+    states:
+      - hidden_when_not_template
+      - editing
+      - empty_filtered_results
+      - validation_error_no_template_selected
+      - success_template_selected
+
+    interactions:
+      - Search and filter templates select one card.
+      - Click Next when selectedTemplateId set.
+
+  - id: cvm_wizard_source_clone
+    title: Source VM for clone
+    goal: Search filter by power OS pick source VM and enter new name for clone path.
+
+    ui:
+      components:
+        - WizardStep
+        - SearchInput
+        - Dropdown
+        - Form
+        - TextInput
+        - Table
+
+    states:
+      - hidden_when_not_clone
+      - editing
+      - empty_no_vms_in_fleet
+      - empty_no_filter_matches
+      - validation_error_missing_source_or_name
+      - success_source_and_name_ready
+
+    interactions:
+      - Filter clone candidates select row set new VM name trim non-empty.
+      - Click Next when cloneSourceVmId and non-empty cloneNewName and fleet non-empty.
+
+  - id: cvm_wizard_customization
+    title: Customization
+    goal: New path hostname and cloud-init optional trim defaults on create; template path VM name required plus optional switches and tabs.
+
+    ui:
+      components:
+        - WizardStep
+        - Form
+        - TextInput
+        - TextArea
+        - Tabs
+        - Switch
+
+    states:
+      - hidden_when_clone
+      - editing_new_path
+      - editing_template_path
+      - validation_error_template_name_blank
+      - success_ready
+
+    interactions:
+      - For template deployment enter virtual machine name required for Next.
+      - For new deployment hostname cloud-init optional.
+      - Adjust template-only switches headless guest log deletion protection.
+
+  - id: cvm_wizard_review_create
+    title: Review and create
+    goal: Confirm summary and optional start after creation checkbox then provision.
+
+    ui:
+      components:
+        - WizardStep
+        - DescriptionList
+        - Checkbox
+        - Content
+
+    states:
+      - reviewing
+      - submitting
+      - error_provision_rejected
+      - success_modal_closes
+
+    interactions:
+      - Toggle start VM after creation checkbox.
+      - Click Create virtual machine to invoke onSave handleProvision close modal append VM list navigate My VMs for applicable tenants.
+
+transitions:
+  - from: cvm_modal_closed
+    action: open create vm from dashboard or toolbar
+    to: cvm_modal_open
+  - from: tud_dashboard_home
+    action: click create virtual machine
+    to: cvm_modal_open
+  - from: mvm_list_view
+    action: open create vm from list affordance
+    to: cvm_modal_open
+  - from: vmc_catalog_grid
+    action: open wizard from template with start index at template step
+    to: cvm_wizard_template
+  - from: vmc_catalog_provider_global
+    action: open wizard from template with start index at template step
+    to: cvm_wizard_template
+  - from: mvm_detail_drawer
+    action: choose clone from VM
+    to: cvm_wizard_source_clone
+  - from: cvm_modal_open
+    action: open modal default start at deployment details
+    to: cvm_wizard_deployment_details
+  - from: cvm_modal_open
+    action: open modal from catalog preset start index
+    to: cvm_wizard_template
+  - from: cvm_modal_open
+    action: open modal from clone preset start index
+    to: cvm_wizard_source_clone
+  - from: cvm_wizard_deployment_details
+    action: click next with deployment new
+    to: cvm_wizard_guest_os
+  - from: cvm_wizard_deployment_details
+    action: click next with deployment template
+    to: cvm_wizard_template
+  - from: cvm_wizard_deployment_details
+    action: click next with deployment clone
+    to: cvm_wizard_source_clone
+  - from: cvm_wizard_guest_os
+    action: click next
+    to: cvm_wizard_boot_source
+  - from: cvm_wizard_boot_source
+    action: click next
+    to: cvm_wizard_compute
+  - from: cvm_wizard_compute
+    action: click next
+    to: cvm_wizard_customization
+  - from: cvm_wizard_template
+    action: click next
+    to: cvm_wizard_customization
+  - from: cvm_wizard_source_clone
+    action: click next
+    to: cvm_wizard_review_create
+  - from: cvm_wizard_customization
+    action: click next for new or template path
+    to: cvm_wizard_review_create
+  - from: cvm_wizard_review_create
+    action: click create virtual machine success
+    to: mvm_list_view
+  - from: cvm_wizard_review_create
+    action: click close or cancel wizard
+    to: cvm_modal_closed
+  - from: cvm_wizard_deployment_details
+    action: click close or cancel
+    to: cvm_modal_closed
+
+validation_rules:
+  - field: guest_os_family_and_type
+    when: deployment equals new
+    rules:
+      - rule: both_required_before_next
+        note: Next disabled until family selected and guestOsType non-empty.
+  - field: boot_source
+    when: deployment equals new
+    rules:
+      - rule: exactly_one_choice_required
+  - field: cpu_memory
+    when: deployment equals new
+    rules:
+      - rule: non_empty_trimmed_strings_required
+        note: Blank trimmed values disable Next.
+  - field: template_selection
+    when: deployment equals template
+    rules:
+      - rule: selected_template_id_required
+  - field: clone_source_and_name
+    when: deployment equals clone
+    rules:
+      - rule: source_vm_id_required
+      - rule: new_name_trim_non_empty
+      - rule: fleet_must_not_be_empty
+  - field: template_vm_name
+    when: deployment equals template on customization step
+    rules:
+      - rule: trim_non_empty_required
+  - field: hostname
+    when: deployment equals new
+    rules:
+      - rule: optional_trim
+        note: Empty hostname falls back to generated id on provision in buildTenantVmFromModalNewPayload.

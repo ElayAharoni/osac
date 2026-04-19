@@ -1,0 +1,49 @@
+id: tenant-user-dashboard
+title: Tenant User Dashboard Statechart
+source_flow: ../ui-flows/tenant-user-dashboard.yaml
+rbac_ref: ../rbac.yaml
+
+context:
+  role: tenantUser
+  tenantId: null
+  selectedPowerFilter: all
+
+initial: tud_dashboard_home
+
+states:
+  tud_dashboard_home:
+    permissions:
+      - view_dashboard
+      - open_create_vm
+      - view_my_vms
+      - view_recent_activities
+    on:
+      CLICK_CREATE_VIRTUAL_MACHINE:
+        target: cvm_modal_open
+        guard: can(role, "open_create_vm")
+      CLICK_ALL_VMS:
+        target: mvm_list_view
+        guard: can(role, "view_my_vms")
+      CLICK_POWER_STATE_CARD:
+        target: mvm_list_view
+        guard: can(role, "view_my_vms")
+      OPEN_RECENT_ACTIVITIES:
+        target: ra_activity_feed
+        guard: can(role, "view_recent_activities")
+
+  tud_sparse_placeholder_page:
+    permissions:
+      - navigate_shell_sections
+
+  cvm_modal_open:
+    external: create-virtual-machine-wizard.statechart.yaml#cvm_modal_open
+  mvm_list_view:
+    external: manage-virtual-machines.statechart.yaml#mvm_list_view
+  ra_activity_feed:
+    external: recent-activities.statechart.yaml#ra_activity_feed
+
+ai-hints:
+  summary: >-
+    Tenant user home machine that routes to create VM, VM list, and activity feed.
+  impossibleStates:
+    - role=providerAdmin and initial=tud_dashboard_home

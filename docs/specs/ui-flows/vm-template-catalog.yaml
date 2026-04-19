@@ -1,0 +1,98 @@
+flow: VM template catalog
+statechart_ref: ../statecharts/vm-template-catalog.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    vmc_catalog_grid:
+      view_catalog_grid: view_catalog
+      create_from_template: create_from_template
+      reselect_catalog_nav: view_catalog
+    vmc_catalog_provider_global:
+      view_global_templates: manage_global_templates
+      create_from_global_template: create_from_template
+
+steps:
+  - id: vmc_catalog_grid
+    title: Template catalog gallery
+    goal: Browse VM templates with search filter and workload tags; open template detail drawer; start create from template. Rendered for tenant user Templates nav and tenant admin Template catalog nav with same component.
+
+    ui:
+      components:
+        - PageSection
+        - Title
+        - SearchInput
+        - Gallery
+        - Card
+        - Drawer
+        - Button
+        - Label
+
+    states:
+      - ready
+      - context_tenant_user_shell
+      - context_tenant_admin_shell
+      - loading
+      - empty_no_templates
+      - error_fetch_catalog
+      - success_populated
+      - drawer_open
+      - drawer_closed
+      - filtering_active
+      - search_no_results
+
+    interactions:
+      - Type in search to filter catalog cards.
+      - Click template card to open detail drawer.
+      - Click create from template or equivalent to open create VM wizard prefilled from catalog.
+      - Re-select Templates or Template catalog nav while already on catalog to close drawer and reset grid per navReselectSeq.
+
+  - id: vmc_catalog_provider_global
+    title: Provider global templates
+    goal: Same catalog under provider admin Global templates nav; provisioning may be blocked for Vertexa demo tenant in App.
+
+    ui:
+      components:
+        - Gallery
+        - Card
+        - Drawer
+        - SearchInput
+
+    states:
+      - ready
+      - context_provider_admin_shell
+      - provision_blocked_for_vertexa_demo
+
+    interactions:
+      - Browse templates; invoke create wizard from template subject to App guard when selectedDemoTenant is vertexa.
+
+transitions:
+  - from: shell_primary_workspace
+    action: tenant user selects templates nav
+    to: vmc_catalog_grid
+  - from: shell_primary_workspace
+    action: tenant admin selects template catalog nav
+    to: vmc_catalog_grid
+  - from: shell_primary_workspace
+    action: provider admin selects global templates nav
+    to: vmc_catalog_provider_global
+  - from: vmc_catalog_grid
+    action: invoke create from template
+    to: cvm_wizard_template
+  - from: vmc_catalog_provider_global
+    action: invoke create from template
+    to: cvm_wizard_template
+  - from: vmc_catalog_grid
+    action: re-select templates or template catalog nav
+    to: vmc_catalog_grid
+  - from: tud_dashboard_home
+    action: navigate to templates via shell
+    to: vmc_catalog_grid
+  - from: tad_dashboard_home
+    action: navigate to template catalog tile
+    to: vmc_catalog_grid
+
+validation_rules:
+  - field: catalog_search
+    rules:
+      - rule: optional_string_match
+        note: Client-side substring match on title subtitle workload fields; no min length.

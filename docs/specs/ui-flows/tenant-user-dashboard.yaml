@@ -1,0 +1,86 @@
+flow: Tenant user dashboard
+statechart_ref: ../statecharts/tenant-user-dashboard.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    tud_dashboard_home:
+      view_dashboard: view_dashboard
+      open_create_vm_modal: open_create_vm
+      open_my_vms: view_my_vms
+      open_recent_activities: view_recent_activities
+    tud_sparse_placeholder_page:
+      open_sparse_nav_page: navigate_shell_sections
+
+applies_when: >-
+  Authenticated shell with demoShellRole tenantUser after Northstar Bank or Bluestone Financial Group
+  (tenant id evergreen) sign-in — not provider admin and not tenant admin.
+
+steps:
+  - id: tud_dashboard_home
+    title: VM workspace dashboard
+    goal: Summarize fleet VM counts by power state, utilization, and quota; launch create VM or drill into lists.
+
+    ui:
+      components:
+        - PageSection
+        - Title
+        - Button
+        - Card
+        - Gallery
+        - DashboardVmUtilizationSection
+        - DashboardVmQuotaSection
+
+    states:
+      - ready
+      - loading
+      - empty_no_stats
+      - error_load_metrics
+      - success_populated
+      - interaction_stat_card_hover
+
+    interactions:
+      - Click Create virtual machine to open create VM modal wizard at deployment step.
+      - Click All VMs stat card to navigate My VMs without power filter.
+      - Click Running Paused or Stopped stat cards to navigate My VMs with matching power filter intent.
+      - Open recent activities via utilization section callback where wired.
+
+  - id: tud_sparse_placeholder_page
+    title: Sparse shell page for unknown or non-dashboard nav
+    goal: Show minimal page chrome when tenant user navigates to a nav item without dedicated content in prototype.
+
+    ui:
+      components:
+        - PageSection
+        - Title
+
+    states:
+      - ready
+      - empty_content
+
+    interactions:
+      - Select a sidebar item that maps to sparse layout in prototype.
+
+transitions:
+  - from: auth_post_login_transition
+    action: complete login as tenant user
+    to: tud_dashboard_home
+  - from: shell_primary_workspace
+    action: select dashboard nav while tenant user
+    to: tud_dashboard_home
+  - from: tud_dashboard_home
+    action: click all VMs stat card
+    to: mvm_list_view
+  - from: tud_dashboard_home
+    action: click running paused or stopped stat card
+    to: mvm_list_view
+  - from: tud_dashboard_home
+    action: click create virtual machine
+    to: cvm_modal_open
+  - from: tud_dashboard_home
+    action: open recent activities from utilization section
+    to: ra_activity_feed
+  - from: shell_primary_workspace
+    action: tenant user selects non implemented primary nav
+    to: tud_sparse_placeholder_page
+
+validation_rules: []

@@ -1,0 +1,98 @@
+id: create-virtual-machine-wizard
+title: Create Virtual Machine Wizard Statechart
+source_flow: ../ui-flows/create-virtual-machine-wizard.yaml
+rbac_ref: ../rbac.yaml
+
+context:
+  role: null
+  tenantId: null
+  deploymentMethod: null
+  selectedTemplateId: null
+  cloneSourceVmId: null
+  cloneNewName: ""
+  isSubmitting: false
+
+initial: cvm_modal_closed
+
+states:
+  cvm_modal_closed:
+    permissions:
+      - open_create_vm
+      - clone_vm
+      - create_from_template
+    on:
+      OPEN_CREATE_VM:
+        target: cvm_modal_open
+        guard: can(role, "open_create_vm")
+      OPEN_FROM_TEMPLATE:
+        target: cvm_wizard_template
+        guard: can(role, "create_from_template")
+      OPEN_FROM_CLONE:
+        target: cvm_wizard_source_clone
+        guard: can(role, "clone_vm")
+
+  cvm_modal_open:
+    permissions:
+      - use_vm_wizard
+    on:
+      START_DEPLOYMENT_DETAILS:
+        target: cvm_wizard_deployment_details
+      START_TEMPLATE_FLOW:
+        target: cvm_wizard_template
+      START_CLONE_FLOW:
+        target: cvm_wizard_source_clone
+
+  cvm_wizard_deployment_details:
+    permissions: [use_vm_wizard]
+    on:
+      NEXT_NEW: { target: cvm_wizard_guest_os }
+      NEXT_TEMPLATE: { target: cvm_wizard_template }
+      NEXT_CLONE: { target: cvm_wizard_source_clone }
+      CLOSE: { target: cvm_modal_closed }
+  cvm_wizard_guest_os:
+    permissions: [use_vm_wizard]
+    on:
+      NEXT: { target: cvm_wizard_boot_source }
+  cvm_wizard_boot_source:
+    permissions: [use_vm_wizard]
+    on:
+      NEXT: { target: cvm_wizard_compute }
+  cvm_wizard_compute:
+    permissions: [use_vm_wizard]
+    on:
+      NEXT: { target: cvm_wizard_customization }
+  cvm_wizard_template:
+    permissions:
+      - use_vm_wizard
+      - create_from_template
+    on:
+      NEXT: { target: cvm_wizard_customization }
+  cvm_wizard_source_clone:
+    permissions:
+      - use_vm_wizard
+      - clone_vm
+    on:
+      NEXT: { target: cvm_wizard_review_create }
+  cvm_wizard_customization:
+    permissions: [use_vm_wizard]
+    on:
+      NEXT: { target: cvm_wizard_review_create }
+  cvm_wizard_review_create:
+    permissions:
+      - use_vm_wizard
+      - provision_vm
+    on:
+      CREATE_SUCCESS:
+        target: mvm_list_view
+        guard: can(role, "provision_vm")
+      CLOSE:
+        target: cvm_modal_closed
+
+  mvm_list_view:
+    external: manage-virtual-machines.statechart.yaml#mvm_list_view
+
+ai-hints:
+  summary: >-
+    Multi-path create VM machine (new, template, clone) ending in provision flow with RBAC guards.
+  impossibleStates:
+    - deploymentMethod=clone and state=cvm_wizard_guest_os

@@ -1,0 +1,164 @@
+flow: Institutional sign-in
+statechart_ref: ../statecharts/institutional-sign-in.statechart.yaml
+
+rbac:
+  required_permissions_by_step:
+    auth_sign_in_form:
+      submit_login: submit_sign_in
+      choose_another_institution: switch_institution
+      view_trusted_issuer_notice: submit_sign_in
+    auth_post_login_transition:
+      enter_authenticated_workspace: submit_sign_in
+
+terminology:
+  bluestone_tenant_id: >-
+    UI shows "Bluestone Financial Group"; prototype code uses tenant id evergreen for cards,
+    osac-entry slugs (evergreen-user, evergreen-admin), and demo data keys.
+
+branded_surfaces:
+  - id: vertexa_provider
+    display_name: Vertexa Cloud Solutions
+    prototype_component: VertexaCloudLoginPage
+    personas: providerAdmin only from welcome same-tab path; tenant vertexa
+  - id: northstar_bank
+    display_name: Northstar Bank
+    prototype_component: NorthstarBankLoginPage
+    personas: tenantUser or tenantAdmin for tenant northstar (typically new tab via osac-entry)
+  - id: bluestone_financial
+    display_name: Bluestone Financial Group
+    prototype_component: EvergreenFinancialGroupLoginPage
+    personas: tenantUser or tenantAdmin for tenant id evergreen (typically new tab via osac-entry)
+
+pre_login_document_titles:
+  description: document.title while logged out, per prototype App.tsx
+  titles:
+    - tenant_context: welcome
+      title: Welcome to OSAC
+    - tenant_context: northstar
+      title: Northstar Bank - Smart banking starts here.
+    - tenant_context: evergreen
+      title: Bluestone Financial Group - Sign in
+    - tenant_context: vertexa
+      title: Vertexa Cloud Solutions - Sign in
+
+pre_login_theme_defaults:
+  description: Theme applied when navigating to each institution login before sign-in (prototype).
+  dark_theme_tenants:
+    - northstar
+    - vertexa
+  light_theme_tenants:
+    - evergreen
+
+role_preconditions:
+  description: Which sign-in surface and pre-filled identifier apply after welcome routing.
+  provider_admin_vertexa:
+    role: providerAdmin
+    tenant_id: vertexa
+    entry: same_tab_from_welcome after wrs_role_selected_pre_auth
+    prefill: Provider platform email (e.g. alex.johnson@vertexacloud.com); see demoTenant.ts DEMO_VERTEXA_PROVIDER_LOGIN_EMAIL
+  tenant_user_org:
+    role: tenantUser
+    tenant_ids:
+      - northstar
+      - evergreen
+    entry: new_tab_from_welcome with osac-entry *-user
+    prefill: Per-tenant user mailbox (e.g. cmorgan@northstarbank.com, priya.nair@bluestonefinancial.com); see DEMO_TENANT_LOGIN_EMAIL_USER
+  tenant_admin_org:
+    role: tenantAdmin
+    tenant_ids:
+      - northstar
+      - evergreen
+    entry: new_tab_from_welcome with osac-entry *-admin
+    prefill: Per-tenant admin mailbox (e.g. jlee@northstarbank.com, marcus.chen@bluestonefinancial.com); see DEMO_TENANT_LOGIN_EMAIL_ADMIN
+
+steps:
+  - id: auth_sign_in_form
+    title: Organization-branded sign-in
+    goal: Collect credentials (demo accepts any values) and submit to enter the authenticated shell.
+
+    entry_context:
+      same_tab_from_welcome:
+        description: Provider Admin (SP / platform operator) chosen on welcome; tenant vertexa and role providerAdmin already set in this document; sign-in stays in the same browser tab.
+      new_tab_from_welcome:
+        description: >-
+          User or Admin on a Northstar Bank or Bluestone Financial Group card opened this document
+          in a new tab; tenant and role were applied from osac-entry on first load (tenant id
+          evergreen for Bluestone) then removed from the URL via replaceState.
+
+    ui:
+      components:
+        - PageLayout
+        - Card
+        - Form
+        - TextInput
+        - InputGroup
+        - Button
+        - Checkbox
+        - Alert
+        - Spinner
+
+    states:
+      - ready
+      - bootstrapped_from_osac_entry_query
+      - loading_transition
+      - trusted_issuers_loading
+      - trusted_issuers_loaded
+      - trusted_issuers_unavailable
+      - fields_disabled_while_loading
+
+    interactions:
+      - Edit username or email field (pre-filled per tenant and role).
+      - Edit password field; toggle show/hide password where provided.
+      - Toggle remember me (Northstar; no persistence in prototype).
+      - Click forgot password (no-op in prototype).
+      - Submit form via Login button to start success transition.
+      - Click choose another institution to clear tenant and return to welcome landing.
+      - Observe DemoSignInNotice when trustedTokenIssuers supplied from fulfillment API.
+
+  - id: auth_post_login_transition
+    title: Authenticated workspace entry
+    goal: After fixed delay, user lands on role-appropriate default nav (dashboard or admin dashboard or provider dashboard).
+
+    ui:
+      components:
+        - Spinner
+        - PageShell
+
+    states:
+      - loading
+      - success_tenant_user_dashboard
+      - success_tenant_admin_dashboard
+      - success_provider_dashboard
+
+    interactions:
+      - Automatic navigation after login success timer completes.
+
+transitions:
+  - from: auth_sign_in_form
+    action: submit login form
+    to: auth_post_login_transition
+  - from: auth_sign_in_form
+    action: click choose another institution
+    to: wrs_welcome_landing
+  - from: auth_post_login_transition
+    action: timer completes for tenant user northstar or evergreen
+    to: tud_dashboard_home
+  - from: auth_post_login_transition
+    action: timer completes for tenant admin northstar or evergreen
+    to: tad_dashboard_home
+  - from: auth_post_login_transition
+    action: timer completes for provider admin
+    to: pad_dashboard_home
+  - from: auth_sign_in_form
+    action: fulfillment API returns issuers list while still logged out
+    to: auth_sign_in_form
+
+validation_rules:
+  - field: password
+    rules:
+      - rule: required_for_real_product
+        note: Prototype does not enforce; QA should expect success even if empty.
+  - field: username_email
+    rules:
+      - rule: format_email_like
+        note: Northstar uses type email; production should validate org IdP policy.

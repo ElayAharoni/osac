@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+apps/app-backend/public/
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# Storybook
+storybook-static/
+
+# Cypress
+apps/e2e/cypress/screenshots/
+apps/e2e/cypress/videos/
+apps/e2e/cypress/downloads/
+
+# Coverage
+coverage/

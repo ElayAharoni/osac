@@ -1,0 +1,58 @@
+id: manage-virtual-machines
+title: Manage Virtual Machines Statechart
+source_flow: ../ui-flows/manage-virtual-machines.yaml
+rbac_ref: ../rbac.yaml
+
+context:
+  role: null
+  tenantId: null
+  selectedVmId: null
+  listMode: cards
+  powerFilter: all
+
+initial: mvm_list_view
+
+states:
+  mvm_list_view:
+    permissions:
+      - view_my_vms
+      - operate_vm_power
+      - clone_vm
+    on:
+      SELECT_VM:
+        target: mvm_detail_drawer
+        guard: can(role, "view_my_vms")
+      CLONE_FROM_ACTIONS:
+        target: cvm_wizard_source_clone
+        guard: can(role, "clone_vm")
+
+  mvm_detail_drawer:
+    permissions:
+      - view_my_vms
+      - operate_vm_power
+      - launch_console
+    on:
+      CLOSE_DETAIL:
+        target: mvm_list_view
+      LAUNCH_CONSOLE:
+        target: vcd_console_page
+        guard: can(role, "launch_console")
+
+  mvm_topology_handoff:
+    permissions:
+      - open_vm_from_topology
+    on:
+      OPEN_REQUEST_CONSUMED:
+        target: mvm_detail_drawer
+        guard: can(role, "open_vm_from_topology")
+
+  cvm_wizard_source_clone:
+    external: create-virtual-machine-wizard.statechart.yaml#cvm_wizard_source_clone
+  vcd_console_page:
+    external: vm-console-standalone-demo.statechart.yaml#vcd_console_page
+
+ai-hints:
+  summary: >-
+    VM fleet list/detail machine with lifecycle actions, cloning, topology handoff, and console launch.
+  impossibleStates:
+    - mvm_detail_drawer with selectedVmId=null
