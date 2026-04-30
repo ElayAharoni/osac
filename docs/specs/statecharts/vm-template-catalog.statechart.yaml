@@ -6,7 +6,7 @@ rbac_ref: ../rbac.yaml
 context:
   role: null
   tenantId: null
-  searchTerm: ""
+  searchTerm: ''
   selectedTemplateId: null
   drawerOpen: false
 

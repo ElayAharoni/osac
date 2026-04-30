@@ -9,7 +9,7 @@ context:
   deploymentMethod: null
   selectedTemplateId: null
   cloneSourceVmId: null
-  cloneNewName: ""
+  cloneNewName: ''
   isSubmitting: false
 
 initial: cvm_modal_closed

@@ -1,5 +1,31 @@
 /* OSAC global styles — augments PatternFly 6 tokens */
 
+/* ---------------------------------------------------------------------------
+ * Single app scrollport on #root — vertical bar only when content exceeds the
+ * viewport. html/body stay fixed height so the window does not double-scroll
+ * with PatternFly Page (100dvh) inner regions.
+ * --------------------------------------------------------------------------- */
+html {
+  height: 100%;
+  overflow: hidden;
+  overflow-x: clip;
+}
+
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overflow-x: clip;
+}
+
+#root {
+  height: 100%;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
 /* Dashboard VM stats grid */
 .osac-dashboard-vm-stats-grid {
   display: grid;
@@ -8,35 +34,36 @@
   margin-bottom: var(--pf-t--global--spacer--lg);
 }
 
+/* Masthead content: single horizontal rail (PF masthead content is flex; we align one child). */
+.osac-masthead-content {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+
 /* Masthead cluster: user + operating mode label */
 .osac-masthead-user-cluster {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: var(--pf-t--global--spacer--xs);
-  margin-inline-start: var(--pf-t--global--spacer--md);
+  flex-shrink: 0;
 }
 
 .osac-masthead-operating-mode {
-  margin-inline-start: 2px;
+  margin-inline-start: 0;
 }
 
 /* Masthead context strip — data sovereignty */
 .osac-masthead-context-cluster {
-  display: flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm);
   flex-shrink: 1;
   min-width: 0;
-  margin-inline-end: var(--pf-t--global--spacer--xs);
 }
 
 .osac-masthead-tenant-trust-strip {
-  display: flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm);
-  flex-wrap: nowrap;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .osac-masthead-tenant-trust-strip__residency {
@@ -151,24 +178,164 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 
-/* Welcome page */
+/* Welcome page — full viewport, centered column (no Page “card” chrome) */
 .osac-welcome-page {
-  min-height: 100vh;
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Fill #root without stacking nested 100dvh min-heights (avoids permanent 1–2 line overflow). */
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: var(--pf-t--global--spacer--4xl) var(--pf-t--global--spacer--lg)
+    var(--pf-t--global--spacer--2xl);
+  background: var(--pf-t--global--background--color--primary--default);
+}
+
+.osac-welcome-page__toggle {
+  position: fixed;
+  top: var(--pf-t--global--spacer--md);
+  right: var(--pf-t--global--spacer--md);
+  z-index: 10;
+}
+
+.osac-welcome-page__main {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--pf-t--global--spacer--2xl) var(--pf-t--global--spacer--md);
-  gap: var(--pf-t--global--spacer--xl);
-  background: var(--pf-t--global--background--color--primary--default);
+  width: 100%;
+  min-height: 0;
 }
 
-.osac-welcome-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--pf-t--global--spacer--md);
+.osac-welcome-page__inner {
   width: 100%;
-  max-width: 900px;
+  max-width: 1280px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--pf-t--global--spacer--lg);
+}
+
+.osac-welcome-page__logo {
+  display: block;
+  width: min(96px, 22vw);
+  height: auto;
+  margin-inline: auto;
+}
+
+.osac-welcome-page__title {
+  text-align: center;
+  margin: 0;
+}
+
+.osac-welcome-page__lede {
+  max-width: 42rem;
+  margin: 0;
+  text-align: center;
+}
+
+.osac-welcome-page__alert {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+}
+
+/* Welcome — three role columns (boxed grid + vertical dividers) */
+.osac-welcome-role-grid {
+  /* Softer than --border--color--default so the box reads lightly in light and dark themes */
+  --osac-welcome-role-border: color-mix(
+    in srgb,
+    var(--pf-t--global--border--color--default) 30%,
+    transparent
+  );
+  display: grid;
+  width: 100%;
+  max-width: 1240px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
+  border: 1px solid var(--osac-welcome-role-border);
+  border-radius: var(--pf-t--global--border--radius--medium);
+  overflow: hidden;
+}
+
+.osac-welcome-role-col {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--xl);
+  border-inline-start: 1px solid var(--osac-welcome-role-border);
+}
+
+.osac-welcome-role-col:first-child {
+  border-inline-start: none;
+}
+
+.osac-welcome-role-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  flex-shrink: 0;
+  margin-block-end: var(--pf-t--global--spacer--md);
+  border-radius: 50%;
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+.osac-welcome-role-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.osac-welcome-role-title {
+  margin: 0 0 var(--pf-t--global--spacer--sm);
+  text-align: center;
+}
+
+.osac-welcome-role-copy {
+  flex: 1 1 auto;
+  margin: 0 0 var(--pf-t--global--spacer--lg);
+  max-width: 26rem;
+  text-align: center;
+}
+
+.osac-welcome-role-actions {
+  width: 100%;
+  max-width: 22rem;
+  margin-top: auto;
+}
+
+.osac-welcome-role-actions--stack {
+  align-items: stretch;
+}
+
+.osac-welcome-role-btn {
+  width: 100%;
+  border-radius: var(--pf-t--global--border--radius--pill);
+}
+
+@media screen and (max-width: 62rem) {
+  .osac-welcome-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .osac-welcome-role-col {
+    border-inline-start: none;
+    border-block-start: 1px solid var(--osac-welcome-role-border);
+    padding-block-start: var(--pf-t--global--spacer--lg);
+  }
+
+  .osac-welcome-role-col:first-child {
+    border-block-start: none;
+    padding-block-start: var(--pf-t--global--spacer--md);
+  }
 }
 
 /* Login page layouts */

@@ -5,6 +5,7 @@ rbac:
   required_permissions_by_step:
     mvm_list_view:
       view_vm_list: view_my_vms
+      open_create_vm_modal: open_create_vm
       run_power_actions: operate_vm_power
       start_clone: clone_vm
       open_vm_detail: view_my_vms
@@ -18,11 +19,18 @@ rbac:
 steps:
   - id: mvm_list_view
     title: My VMs list
-    goal: View search filter and sort VM cards or table; open detail; trigger power actions or clone.
+    goal: >-
+      View search filter and sort VM cards or table; open create VM from header (same control as
+      dashboard); open detail; trigger power actions or clone.
 
     ui:
       components:
         - PageSection
+        - PageHeader
+        - CreateVmWizard
+        - Stack
+        - Flex
+        - Split
         - Title
         - SearchInput
         - ToggleGroup
@@ -31,6 +39,10 @@ steps:
         - Dropdown
         - Button
         - Label
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - ready
@@ -45,6 +57,7 @@ steps:
       - list_view_mode_table
 
     interactions:
+      - Click Create virtual machine in the page header to open the create VM wizard (tenant user; same label and placement as dashboard).
       - Toggle list versus card layout.
       - Search by VM name substring.
       - Open row or card actions menu for start stop restart clone.
@@ -58,6 +71,8 @@ steps:
     ui:
       components:
         - Drawer
+        - Stack
+        - Flex
         - Breadcrumb
         - Tabs
         - Card
@@ -65,6 +80,10 @@ steps:
         - Alert
         - Button
         - VmGuestDesktopSnapshot
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - ready
@@ -92,8 +111,14 @@ steps:
 
     ui:
       components:
+        - PageSection
+        - Stack
         - NetworkTopologyPage
         - HandoffState
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - request_pending
@@ -109,6 +134,9 @@ transitions:
   - from: shell_primary_workspace
     action: select My VMs nav
     to: mvm_list_view
+  - from: mvm_list_view
+    action: click create virtual machine in page header (tenant user)
+    to: cvm_modal_open
   - from: mvm_list_view
     action: select a virtual machine row or card
     to: mvm_detail_drawer

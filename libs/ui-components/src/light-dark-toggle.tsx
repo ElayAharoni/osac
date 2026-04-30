@@ -1,4 +1,4 @@
-import { Button } from '@patternfly/react-core'
+import { Button, Flex, FlexItem } from '@patternfly/react-core'
 import { MoonIcon } from '@patternfly/react-icons/dist/esm/icons/moon-icon'
 import { SunIcon } from '@patternfly/react-icons/dist/esm/icons/sun-icon'
 
@@ -21,26 +21,30 @@ export function LightDarkToggle({
   landingAriaLabel,
 }: LightDarkToggleProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--pf-t--global--spacer--xs)' }}>
+    <Flex alignItems={{ default: 'alignItemsCenter' }} spaceItems={{ default: 'spaceItemsXs' }}>
       {variant === 'shell' && landingOnSelect && (
-        <Button
-          variant="link"
-          isInline
-          onClick={landingOnSelect}
-          aria-label={landingAriaLabel ?? 'Back to welcome'}
-          style={{ fontSize: 'var(--pf-t--global--font--size--body--sm)' }}
-        >
-          ← Home
-        </Button>
+        <FlexItem>
+          <Button
+            variant="link"
+            isInline
+            onClick={landingOnSelect}
+            aria-label={landingAriaLabel ?? 'Back to welcome'}
+            style={{ fontSize: 'var(--pf-t--global--font--size--body--sm)' }}
+          >
+            ← Home
+          </Button>
+        </FlexItem>
       )}
-      <Button
-        variant="plain"
-        aria-label={ariaLabel}
-        onClick={() => onChange(!isDark)}
-        title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-      >
-        {isDark ? <SunIcon /> : <MoonIcon />}
-      </Button>
-    </div>
+      <FlexItem>
+        <Button
+          variant="plain"
+          aria-label={ariaLabel}
+          onClick={() => onChange(!isDark)}
+          title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          {isDark ? <SunIcon /> : <MoonIcon />}
+        </Button>
+      </FlexItem>
+    </Flex>
   )
 }

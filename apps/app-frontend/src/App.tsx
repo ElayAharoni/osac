@@ -2,9 +2,8 @@ import { useCallback, useRef } from 'react'
 import { BrowserRouter, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
 import type { DemoShellRole } from '@osac/api-contracts'
 import { SessionProvider, useSession } from './contexts/SessionContext'
-import { WelcomePage } from './pages/WelcomePage'
-import { SignInPage } from './pages/SignInPage'
-import { AppShell } from './pages/AppShell'
+import { WelcomePage, SignInPage } from './pages/auth'
+import { AppShell } from './pages/shell'
 
 function InnerApp() {
   const navigate = useNavigate()
@@ -36,16 +35,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          selectedTenant && !isLoggedIn ? (
-            <Navigate to="/sign-in" replace />
-          ) : (
-            <WelcomePage />
-          )
-        }
-      />
+      <Route path="/" element={<WelcomePage />} />
       <Route
         path="/sign-in"
         element={
@@ -59,11 +49,7 @@ function AppRoutes() {
       <Route
         path="/*"
         element={
-          isLoggedIn ? (
-            <AppShell />
-          ) : (
-            <Navigate to={selectedTenant ? '/sign-in' : '/'} replace />
-          )
+          isLoggedIn ? <AppShell /> : <Navigate to={selectedTenant ? '/sign-in' : '/'} replace />
         }
       />
     </Routes>

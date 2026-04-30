@@ -35,9 +35,15 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Title
         - Card
         - Button
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -56,8 +62,14 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Title
         - Table
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -78,6 +90,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static
@@ -91,10 +107,17 @@ steps:
 
     ui:
       components:
+        - PageSection
+        - Stack
+        - Flex
         - Gallery
         - Card
         - Drawer
         - SearchInput
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -110,8 +133,13 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
         - Title
         - NetworkTopologyPage
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -129,6 +157,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static
@@ -145,6 +177,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static

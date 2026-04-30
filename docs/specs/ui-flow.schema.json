@@ -8,7 +8,6 @@
   "required": ["flow", "statechart_ref", "rbac", "steps", "transitions", "validation_rules"],
 
   "properties": {
-
     "flow": {
       "type": "string",
       "description": "Human-readable name for this flow, matching the title in FLOW-INDEX.yaml flows[].",
@@ -79,10 +78,14 @@
       "items": { "$ref": "#/$defs/RoutingChoice" }
     },
 
-    "branded_surfaces": {
+    "sign_in_shell": {
+      "$ref": "#/$defs/SignInShell"
+    },
+
+    "branding_profiles": {
       "type": "array",
-      "description": "Optional list of institution-branded login surfaces. Used only in institutional-sign-in.",
-      "items": { "$ref": "#/$defs/BrandedSurface" }
+      "description": "Optional per-tenant branding for institutional-sign-in when using sign_in_shell.",
+      "items": { "$ref": "#/$defs/BrandingProfile" }
     },
 
     "pre_login_document_titles": {
@@ -127,7 +130,7 @@
 
     "role_preconditions": {
       "type": "object",
-      "description": "Optional map describing which sign-in surface and pre-filled identifier apply per persona after welcome routing. May include a top-level 'description' string.",
+      "description": "Optional map describing which branding profile and pre-filled identifier apply per persona after welcome routing. May include a top-level 'description' string.",
       "properties": {
         "description": {
           "type": "string",
@@ -156,13 +159,11 @@
   "additionalProperties": false,
 
   "$defs": {
-
     "Step": {
       "type": "object",
       "description": "A single UX waypoint — a screen, modal, drawer, or logical state within the flow.",
       "required": ["id", "title", "goal", "ui", "states", "interactions"],
       "properties": {
-
         "id": {
           "type": "string",
           "description": "Globally unique canonical step ID (see FLOW-INDEX canonical_step_ids). Prefix matches the flow (e.g. shell_, auth_, tud_, mvm_).",
@@ -239,6 +240,31 @@
             },
             "additionalProperties": false
           }
+        },
+
+        "ui_policy": {
+          "$ref": "#/$defs/UiPolicy"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "UiPolicy": {
+      "type": "object",
+      "description": "Optional implementation policy for UI composition (e.g. prefer PatternFly primitives over raw wrappers).",
+      "properties": {
+        "prefer_patternfly_primitives": {
+          "type": "boolean",
+          "description": "When true, prefer PatternFly layout/composition components for structure."
+        },
+        "minimize_raw_div_wrappers": {
+          "type": "boolean",
+          "description": "When true, avoid structural raw div containers unless no practical PF equivalent exists."
+        },
+        "max_raw_div_wrappers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cap on raw opening <div> tags (without pf-primitive-exception) in TSX that implements this step. Enforced by pnpm check:pf-primitives: each file's leading block comment must include flow: <kebab-flow-id> matching docs/specs/ui-flows/<flow>.yaml, and optionally step: <id> or steps: id1, id2; otherwise the checker uses the max budget across all steps in that flow. Non-div raw tags are not covered by this number (they always require pf-primitive-exception). See design-system.yaml layout_and_shell.implementation_policy.automated_check_alignment."
         }
       },
       "additionalProperties": false
@@ -347,13 +373,22 @@
 
     "EntryBootstrap": {
       "type": "object",
-      "description": "Describes the query-param bootstrap mechanism for tenant org new-tab flows.",
+      "description": "Describes optional query-param bootstrap and related navigation rules for welcome and sign-in.",
       "required": ["description", "query_param", "allowed_values", "unknown_value_behavior"],
       "properties": {
         "description": { "type": "string" },
         "query_param": {
           "type": "string",
           "description": "URL query parameter name used to bootstrap tenant and role on page load."
+        },
+        "browser_history": {
+          "type": "object",
+          "description": "How SPA routing interacts with the browser history stack (e.g. Back after welcome → sign-in).",
+          "required": ["description"],
+          "properties": {
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
         },
         "allowed_values": {
           "type": "array",
@@ -401,37 +436,55 @@
         },
         "osac_entry": {
           "type": "string",
-          "description": "Value passed as the osac-entry query param when opening a new tab."
+          "description": "Equivalent osac-entry slug for optional deep links or bookmarks; welcome card clicks use same-tab session state instead of this query param."
         }
       },
       "additionalProperties": false
     },
 
-    "BrandedSurface": {
+    "SignInShell": {
       "type": "object",
-      "description": "An institution-branded login page variant.",
-      "required": ["id", "display_name", "prototype_component", "personas"],
+      "description": "Single React shell implementing institutional sign-in; branding_profiles supply per-tenant configuration.",
+      "required": ["component"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Optional prose for implementers."
+        },
+        "component": {
+          "type": "string",
+          "description": "Name of the React component implementing auth_sign_in_form for all institutions.",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "BrandingProfile": {
+      "type": "object",
+      "description": "Per-tenant branding and persona scope for the institutional sign-in shell.",
+      "required": ["id", "tenant_id", "display_name", "personas"],
       "properties": {
         "id": {
           "type": "string",
-          "description": "Internal identifier for this branded surface.",
+          "description": "Internal identifier for this profile (e.g. vertexa_provider).",
+          "minLength": 1
+        },
+        "tenant_id": {
+          "type": "string",
+          "description": "Stable tenant key used by session routing (vertexa | northstar | evergreen).",
           "minLength": 1
         },
         "display_name": {
           "type": "string",
           "description": "Human-readable institution name shown in UI."
         },
-        "prototype_component": {
-          "type": "string",
-          "description": "Name of the React component implementing this surface in the prototype."
-        },
         "personas": {
           "type": "string",
-          "description": "Prose describing which demo personas use this surface."
+          "description": "Prose describing which demo personas use this profile."
         }
       },
       "additionalProperties": false
     }
-
   }
 }

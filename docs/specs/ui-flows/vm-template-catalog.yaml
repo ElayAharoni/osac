@@ -19,6 +19,8 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Title
         - SearchInput
         - Gallery
@@ -26,6 +28,10 @@ steps:
         - Drawer
         - Button
         - Label
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -52,10 +58,17 @@ steps:
 
     ui:
       components:
+        - PageSection
+        - Stack
+        - Flex
         - Gallery
         - Card
         - Drawer
         - SearchInput
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready

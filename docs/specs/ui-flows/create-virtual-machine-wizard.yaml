@@ -35,6 +35,10 @@ steps:
       components:
         - Button
         - Modal
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - closed
@@ -55,6 +59,12 @@ steps:
         - Wizard
         - WizardHeader
         - WizardFooter
+        - Stack
+        - Flex
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - open
@@ -75,6 +85,12 @@ steps:
         - WizardStep
         - Card
         - Form
+        - Stack
+        - Flex
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - editing
@@ -95,6 +111,11 @@ steps:
         - Card
         - Form
         - FormSelect
+        - Stack
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - hidden_when_not_new
@@ -115,6 +136,11 @@ steps:
         - WizardStep
         - Form
         - Radio
+        - Stack
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - hidden_when_not_new
@@ -135,6 +161,11 @@ steps:
         - WizardStep
         - Form
         - TextInput
+        - Stack
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - hidden_when_not_new
@@ -156,6 +187,11 @@ steps:
         - Dropdown
         - Gallery
         - Card
+        - Stack
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - hidden_when_not_template
@@ -180,6 +216,12 @@ steps:
         - Form
         - TextInput
         - Table
+        - Stack
+        - Split
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - hidden_when_not_clone
@@ -205,6 +247,12 @@ steps:
         - TextArea
         - Tabs
         - Switch
+        - Stack
+        - Flex
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - hidden_when_clone
@@ -228,6 +276,11 @@ steps:
         - DescriptionList
         - Checkbox
         - Content
+        - Stack
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - reviewing
@@ -241,7 +294,7 @@ steps:
 
 transitions:
   - from: cvm_modal_closed
-    action: open create vm from dashboard or toolbar
+    action: open create vm from dashboard, My VMs header, or toolbar
     to: cvm_modal_open
   - from: tud_dashboard_home
     action: click create virtual machine

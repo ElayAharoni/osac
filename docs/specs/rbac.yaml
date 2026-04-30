@@ -125,7 +125,7 @@ permissions:
     flows:
       - tenant-administration
   - id: view_quota
-    label: View tenant quota and utilization
+    label: View tenant quota
     risk: medium
     flows:
       - tenant-administration

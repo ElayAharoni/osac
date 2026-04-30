@@ -14,10 +14,17 @@ steps:
 
     ui:
       components:
-        - PageLayout
+        - Page
+        - PageSection
+        - Stack
+        - Flex
         - VmGuestDesktopContent
         - Windows11Taskbar
         - Button
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready

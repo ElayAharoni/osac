@@ -16,8 +16,7 @@ import {
 export const queryKeys = {
   computeInstances: (params?: ListComputeInstancesParams) =>
     ['compute_instances', params ?? {}] as const,
-  clusterTemplates: (params?: ListTemplatesParams) =>
-    ['cluster_templates', params ?? {}] as const,
+  clusterTemplates: (params?: ListTemplatesParams) => ['cluster_templates', params ?? {}] as const,
 }
 
 // ---------------------------------------------------------------------------

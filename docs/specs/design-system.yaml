@@ -19,22 +19,52 @@ packages:
     Monorepo ui kit aligns with libs/ui-components package.json; apps/app-frontend should consume
     UI through @osac/ui-components or the same @patternfly/* major versions — no mixing PF5 and PF6.
   required:
-    - name: "@patternfly/patternfly"
+    - name: '@patternfly/patternfly'
       use_for: Base styles, design tokens, global CSS variables
-    - name: "@patternfly/react-core"
+    - name: '@patternfly/react-core'
       use_for: Layout, forms, navigation, feedback, content primitives
-    - name: "@patternfly/react-icons"
+    - name: '@patternfly/react-icons'
       use_for: Masthead and action icons
-    - name: "@patternfly/react-table"
+    - name: '@patternfly/react-table'
       use_for: Data tables (tenant lists, VM lists, users)
   optional:
-    - name: "@patternfly/react-charts"
+    - name: '@patternfly/react-charts'
       use_for: Donut and line charts when charts match PF chart patterns; otherwise use PF6 tokens for custom SVG/D3
 
 layout_and_shell:
   description: >-
     Primary authenticated experience uses the PatternFly page pattern (prototype reference:
     Projects/osac-demo/src/App.tsx — Page, Masthead, PageSidebar, PageSection).
+  document_scroll:
+    description: >-
+      apps/app-frontend/src/styles/global.css pins html/body to the viewport height with
+      overflow hidden, and sets #root to height 100%, max-height 100dvh, overflow-y auto so the
+      vertical scrollbar appears only when the mounted route exceeds the viewport. Unauthenticated
+      layouts must not combine min-height 100dvh on an outer wrapper with additional near-viewport
+      min-heights on children (that stacks past 100% and forces a useless scrollbar). PatternFly
+      Page keeps long content scrolling inside .pf-v6-c-page__main-container.
+  implementation_policy:
+    prefer_patternfly_layout_primitives: true
+    avoid_raw_div_for_structure: true
+    enforce_with_automated_check: true
+    automated_check_command: pnpm check:pf-primitives
+    automated_check_alignment: >-
+      scripts/check-pf-primitives.mjs reads docs/specs/ui-flows/*.yaml: for each step under steps:,
+      ui_policy.max_raw_div_wrappers sets how many raw opening <div> tags may appear in a source file
+      without a pf-primitive-exception comment. TSX files should start with a block comment containing
+      flow: <kebab-flow-id> and optionally step: <step_id> or steps: id1, id2 (comma-separated ids).
+      If step(s) are omitted, the checker uses the maximum max_raw_div_wrappers among all steps in that
+      flow (or among listed step ids). Non-div raw tags (span, section, article, main, lowercase button)
+      are not budgeted in YAML; each occurrence still requires a nearby pf-primitive-exception comment.
+    allowed_raw_div_cases:
+      - purely decorative wrappers with no practical PatternFly primitive equivalent
+      - narrow animation or positioning edge cases where PF primitives cannot express intent
+      - counted toward ui_policy.max_raw_div_wrappers for the file's flow/step when under budget
+      - overflow beyond the step budget or any non-div raw tag still uses pf-primitive-exception with a short rationale
+    documentation_expectation: >-
+      When a raw div is required beyond the ui_policy budget, add a short pf-primitive-exception comment
+      explaining why PF primitives were not suitable for that case. Keep ui-flow yaml in sync when
+      changing structural wrappers.
   primitives:
     - Page (masthead, sidebar, breadcrumb, main)
     - Masthead / MastheadMain / MastheadBrand / MastheadContent
@@ -42,7 +72,9 @@ layout_and_shell:
     - Nav / NavList / NavItem / NavExpandable
     - PageSection for main content regions
   landing_unauthenticated:
-    description: Welcome and institutional login pages use Card, Alert, Form, Button, Title, Content per ui-flows.
+    description: >-
+      Welcome uses role columns with PatternFly icons (crown, users, user) and buttons; institutional
+      login uses Card, Alert, Form, Button, Title, Content per ui-flows.
 
 theming:
   description: >-
@@ -66,6 +98,7 @@ forms_and_feedback:
     - Build forms with PF Form patterns (labels, helper text, validated FormGroup where applicable).
     - Use Alert for inline banners; Spinner or skeleton patterns for loading; disable inputs during submit when UX requires.
     - Wizard flows use PF Wizard (or Modal + stepped content) consistent with create-virtual-machine-wizard.yaml.
+    - Prefer InputGroup, Stack, Flex, Bullseye, Split, and Grid for composition before raw div containers.
 
 accessibility:
   rules:
@@ -121,9 +154,9 @@ flow_component_mapping:
     - logical: NetworkTopology
       patternfly: Custom layout/SVG with PF tokens (no single PF topology export)
     - logical: DonutChart
-      patternfly: "@patternfly/react-charts or token-styled custom chart"
+      patternfly: '@patternfly/react-charts or token-styled custom chart'
     - logical: LineChart
-      patternfly: "@patternfly/react-charts or token-styled custom chart"
+      patternfly: '@patternfly/react-charts or token-styled custom chart'
     - logical: RecentActivityList
       patternfly: DataList, List, or Table with PF list patterns
 

@@ -4,10 +4,10 @@ metadata:
   name: osac-config
   namespace: osac-dev
 data:
-  PORT: "8080"
-  HOST: "0.0.0.0"
-  LOG_LEVEL: "info"
-  OSAC_API_MODE: "mock"
+  PORT: '8080'
+  HOST: '0.0.0.0'
+  LOG_LEVEL: 'info'
+  OSAC_API_MODE: 'mock'
   # Uncomment and set to enable fulfillment proxy mode:
   # OSAC_API_MODE: "dev"
   # FULFILLMENT_API_URL: "https://fulfillment.example.com/api"

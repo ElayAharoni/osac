@@ -17,11 +17,7 @@
  *   GET  /api/fulfillment/v1/security_groups         → mock SG list
  */
 import type { FastifyInstance } from 'fastify'
-import {
-  VM_TEMPLATES,
-  buildVmsForTenant,
-  DEMO_ORGANIZATIONS,
-} from '@osac/api-contracts'
+import { VM_TEMPLATES, buildVmsForTenant, DEMO_ORGANIZATIONS } from '@osac/api-contracts'
 import type { ComputeInstance } from '@osac/api-contracts'
 
 interface RouteConfig {
@@ -165,7 +161,11 @@ export async function registerFulfillmentRoutes(app: FastifyInstance, config: Ro
   })
 
   app.get(`${prefix}/clusters`, async () => {
-    return { size: 2, total: 2, items: DEMO_ORGANIZATIONS.map((o) => ({ id: o.id, name: o.displayName })) }
+    return {
+      size: 2,
+      total: 2,
+      items: DEMO_ORGANIZATIONS.map((o) => ({ id: o.id, name: o.displayName })),
+    }
   })
 
   app.get(`${prefix}/virtual_networks`, async () => {
