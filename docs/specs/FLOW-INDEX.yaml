@@ -78,14 +78,16 @@ flows:
   - id: welcome-and-role-selection
     file: ui-flows/welcome-and-role-selection.yaml
     summary: >-
-      Welcome to OSAC — Provider Admin / SP platform operator uses Enter (same tab) then Vertexa
-      sign-in; tenant org User/Admin (Northstar Bank, Bluestone Financial Group) opens dedicated
-      login in a new tab via osac-entry; see routing_matrix and entry_bootstrap in that file.
+      Welcome landing titled Red Hat OSAC Prototypes — every demo persona (Provider Admin, tenant org User/Admin for Northstar
+      Bank and Bluestone Financial Group) applies tenant and role in session then navigates to
+      institutional sign-in in the same tab; optional osac-entry cold load is documented in
+      routing_matrix and entry_bootstrap in that file.
   - id: institutional-sign-in
     file: ui-flows/institutional-sign-in.yaml
     summary: >-
-      Three branded surfaces (Vertexa provider, Northstar, Bluestone); trusted issuers optional;
-      post-login delay then role-specific shell (tenant user vs tenant admin vs provider admin).
+      Institutional sign-in uses one configurable shell (InstitutionalSignInPage) for Vertexa,
+      Northstar, and Bluestone; branding_profiles supply per-tenant copy and affordances.
+      Trusted issuers optional; post-login delay then role-specific shell (tenant user vs tenant admin vs provider admin).
   - id: application-shell-session
     file: ui-flows/application-shell-session.yaml
     summary: >-
@@ -93,7 +95,7 @@ flows:
       theme, account menu, logout, breadcrumb for recent activities; Vertexa aggregates tenant VMs in prototype.
   - id: tenant-user-dashboard
     file: ui-flows/tenant-user-dashboard.yaml
-    summary: VMaaS home — stats cards, utilization, quota; deep links into My VMs with filters.
+    summary: VMaaS home — power-state stat cards; create VM; deep links into My VMs with filters.
   - id: vm-template-catalog
     file: ui-flows/vm-template-catalog.yaml
     summary: Template gallery for tenant user, tenant admin template catalog, provider global templates; opens create wizard from template.
@@ -145,24 +147,18 @@ cross_flow_entry_points:
     to_step: auth_sign_in_form
     documented_in: ui-flows/welcome-and-role-selection.yaml
     browser_target: same_tab
-    note: Provider Admin only — landing sets Vertexa tenant and role then routes to sign-in in this tab.
-  - from_step: wrs_welcome_landing
-    to_step: auth_sign_in_form
-    documented_in: ui-flows/welcome-and-role-selection.yaml
-    browser_target: new_tab
     note: >-
-      Northstar Bank or Bluestone Financial Group (tenant id evergreen in code) User or Admin —
-      welcome page opens a new window with osac-entry; new tab applies tenant and role then shows institutional sign-in.
+      After any welcome persona selection, session holds tenant and role; app routes to
+      institutional sign-in in this tab.
 
 cross_flow_notes:
   - Transitions may reference step ids defined in other YAML files; see canonical_step_ids.
   - >-
     Bluestone Financial Group on the welcome card maps to demo tenant id evergreen; osac-entry
-    values remain evergreen-user and evergreen-admin.
+    values remain evergreen-user and evergreen-admin for optional deep links.
   - >-
-    wrs_role_selected_pre_auth applies only to Provider Admin same-tab entry; tenant org
-    User/Admin transitions go wrs_welcome_landing → auth_sign_in_form in a new tab (no
-    wrs_role_selected_pre_auth in the originating tab).
+    Tenant org User/Admin paths use wrs_welcome_landing → wrs_role_selected_pre_auth →
+    auth_sign_in_form in the same tab, matching Provider Admin.
 
 canonical_step_ids:
   description: >-
@@ -212,8 +208,8 @@ canonical_step_ids:
 
 bonus_ux_gaps_and_edge_cases:
   - >-
-    Popup blockers may prevent new-tab org flows; product should surface a clear error or
-    fallback same-tab if window.open returns null (prototype does not handle yet).
+    Invalid or unknown osac-entry on cold load is ignored per welcome entry_bootstrap; user
+    remains able to pick a persona from the welcome page.
   - Login forms accept empty password; no client validation_error state in prototype.
   - Forgot password, Help, Settings masthead actions are no-ops (preventDefault only).
   - Account settings menu item prevents default with no navigation.

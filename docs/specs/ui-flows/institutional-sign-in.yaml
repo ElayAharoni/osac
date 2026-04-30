@@ -15,25 +15,36 @@ terminology:
     UI shows "Bluestone Financial Group"; prototype code uses tenant id evergreen for cards,
     osac-entry slugs (evergreen-user, evergreen-admin), and demo data keys.
 
-branded_surfaces:
+sign_in_shell:
+  description: >-
+    One route/component implements step auth_sign_in_form for every demo institution.
+    After welcome routing or osac-entry bootstrap, the app resolves a stable tenant id
+    (vertexa | northstar | evergreen) and demo role; the shell loads the matching row
+    from branding_profiles to drive copy, default identifier, theme and document title
+    (see pre_login_* sections), and small affordance differences (e.g. remember-me).
+    PatternFly building blocks remain those listed on auth_sign_in_form.ui.components;
+    structural layout should prefer PF primitives over raw div wrappers.
+  component: InstitutionalSignInPage
+
+branding_profiles:
   - id: vertexa_provider
+    tenant_id: vertexa
     display_name: Vertexa Cloud Solutions
-    prototype_component: VertexaCloudLoginPage
     personas: providerAdmin only from welcome same-tab path; tenant vertexa
   - id: northstar_bank
+    tenant_id: northstar
     display_name: Northstar Bank
-    prototype_component: NorthstarBankLoginPage
-    personas: tenantUser or tenantAdmin for tenant northstar (typically new tab via osac-entry)
+    personas: tenantUser or tenantAdmin for tenant northstar (same tab from welcome; optional osac-entry cold load)
   - id: bluestone_financial
+    tenant_id: evergreen
     display_name: Bluestone Financial Group
-    prototype_component: EvergreenFinancialGroupLoginPage
-    personas: tenantUser or tenantAdmin for tenant id evergreen (typically new tab via osac-entry)
+    personas: tenantUser or tenantAdmin for tenant id evergreen (same tab from welcome; optional osac-entry cold load)
 
 pre_login_document_titles:
   description: document.title while logged out, per prototype App.tsx
   titles:
     - tenant_context: welcome
-      title: Welcome to OSAC
+      title: Red Hat OSAC Prototypes
     - tenant_context: northstar
       title: Northstar Bank - Smart banking starts here.
     - tenant_context: evergreen
@@ -50,7 +61,7 @@ pre_login_theme_defaults:
     - evergreen
 
 role_preconditions:
-  description: Which sign-in surface and pre-filled identifier apply after welcome routing.
+  description: Which branding profile and pre-filled identifier apply after welcome routing.
   provider_admin_vertexa:
     role: providerAdmin
     tenant_id: vertexa
@@ -61,14 +72,14 @@ role_preconditions:
     tenant_ids:
       - northstar
       - evergreen
-    entry: new_tab_from_welcome with osac-entry *-user
+    entry: same_tab_from_welcome after wrs_role_selected_pre_auth, or osac_entry_deep_link with *-user
     prefill: Per-tenant user mailbox (e.g. cmorgan@northstarbank.com, priya.nair@bluestonefinancial.com); see DEMO_TENANT_LOGIN_EMAIL_USER
   tenant_admin_org:
     role: tenantAdmin
     tenant_ids:
       - northstar
       - evergreen
-    entry: new_tab_from_welcome with osac-entry *-admin
+    entry: same_tab_from_welcome after wrs_role_selected_pre_auth, or osac_entry_deep_link with *-admin
     prefill: Per-tenant admin mailbox (e.g. jlee@northstarbank.com, marcus.chen@bluestonefinancial.com); see DEMO_TENANT_LOGIN_EMAIL_ADMIN
 
 steps:
@@ -78,24 +89,36 @@ steps:
 
     entry_context:
       same_tab_from_welcome:
-        description: Provider Admin (SP / platform operator) chosen on welcome; tenant vertexa and role providerAdmin already set in this document; sign-in stays in the same browser tab.
-      new_tab_from_welcome:
         description: >-
-          User or Admin on a Northstar Bank or Bluestone Financial Group card opened this document
-          in a new tab; tenant and role were applied from osac-entry on first load (tenant id
-          evergreen for Bluestone) then removed from the URL via replaceState.
+          Persona chosen on welcome (Provider Admin, or User/Admin on Northstar Bank or Bluestone
+          Financial Group). Session holds tenant id (vertexa | northstar | evergreen) and role;
+          navigation stays in the same browser tab.
+      osac_entry_deep_link:
+        description: >-
+          Optional cold load with ?osac-entry=… applies tenant and role on first load (tenant id
+          evergreen for Bluestone) then removes the query via replaceState; same document as
+          same_tab_from_welcome without requiring a prior welcome interaction.
 
     ui:
       components:
-        - PageLayout
+        - Page
+        - PageSection
+        - Bullseye
+        - Stack
+        - Flex
         - Card
         - Form
+        - FormGroup
         - TextInput
         - InputGroup
         - Button
         - Checkbox
         - Alert
         - Spinner
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -107,6 +130,8 @@ steps:
       - fields_disabled_while_loading
 
     interactions:
+      - Browser Back from this step returns to the welcome route when the user arrived via push navigation from welcome (prototype keeps / on the history stack).
+      - Shell selects layout and copy from branding_profiles using resolved tenant_id and role.
       - Edit username or email field (pre-filled per tenant and role).
       - Edit password field; toggle show/hide password where provided.
       - Toggle remember me (Northstar; no persistence in prototype).

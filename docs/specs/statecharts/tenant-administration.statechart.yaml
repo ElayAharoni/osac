@@ -18,11 +18,20 @@ states:
       - view_topology
       - view_catalog
     on:
-      NAVIGATE_USERS_TILE: { target: tad_users, guard: can(role, "manage_users") }
-      NAVIGATE_QUOTA_TILE: { target: tad_quota, guard: can(role, "view_quota") }
-      NAVIGATE_TEMPLATES_TILE: { target: vmc_catalog_grid, guard: can(role, "view_catalog") }
-      NAVIGATE_NETWORKS_TILE: { target: tad_networks_topology, guard: can(role, "view_topology") }
-      NAVIGATE_STORAGE_TILE: { target: tad_storage_placeholder }
+      NAVIGATE_USERS_TILE:
+        target: tad_users
+        guard: can(role, "manage_users")
+      NAVIGATE_QUOTA_TILE:
+        target: tad_quota
+        guard: can(role, "view_quota")
+      NAVIGATE_TEMPLATES_TILE:
+        target: vmc_catalog_grid
+        guard: can(role, "view_catalog")
+      NAVIGATE_NETWORKS_TILE:
+        target: tad_networks_topology
+        guard: can(role, "view_topology")
+      NAVIGATE_STORAGE_TILE:
+        target: tad_storage_placeholder
 
   tad_users:
     permissions: [manage_users]

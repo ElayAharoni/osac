@@ -36,10 +36,16 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Title
         - Card
         - Gallery
         - Button
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -58,9 +64,15 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Title
         - Button
         - Table
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -80,10 +92,16 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Gallery
         - Title
         - DonutChart
         - Table
         - Card
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - ready
@@ -101,8 +119,13 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
         - Title
         - NetworkTopologyPage
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -123,6 +146,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static
@@ -139,6 +166,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static
@@ -155,6 +186,10 @@ steps:
         - PageSection
         - Title
         - Content
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - placeholder_static

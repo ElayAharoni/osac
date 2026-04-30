@@ -4,11 +4,11 @@ metadata:
   name: osac-config
   namespace: osac-integration
 data:
-  PORT: "8080"
-  HOST: "0.0.0.0"
-  LOG_LEVEL: "warn"
-  OSAC_API_MODE: "dev"
-  NAMESPACE: "osac-integration"
+  PORT: '8080'
+  HOST: '0.0.0.0'
+  LOG_LEVEL: 'warn'
+  OSAC_API_MODE: 'dev'
+  NAMESPACE: 'osac-integration'
   # Required in integration mode — set via Secret or ExternalSecret in practice:
   # FULFILLMENT_API_URL: "https://fulfillment.integration.example.com/api"
   # OIDC_CLIENT_ID: "osac-demo"

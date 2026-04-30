@@ -5,8 +5,8 @@ rbac:
   required_permissions_by_step:
     wrs_welcome_landing:
       enter_provider_admin: choose_persona
-      open_tenant_user_new_tab: choose_persona
-      open_tenant_admin_new_tab: choose_persona
+      select_tenant_user: choose_persona
+      select_tenant_admin: choose_persona
       toggle_theme: use_theme_toggle
     wrs_role_selected_pre_auth:
       proceed_to_sign_in: choose_persona
@@ -21,12 +21,18 @@ terminology:
 
 entry_bootstrap:
   description: >-
-    Tenant org flows opened from the welcome page use a new browser tab. The new tab URL
-    carries query param osac-entry so the app can set tenant and role before sign-in.
-    After first load the app removes osac-entry from the address bar via replaceState.
-    Implementation opens the new tab with window.open(url, "_blank", "noopener,noreferrer");
-    the originating tab stays on the welcome page.
+    Welcome card clicks (Provider Admin and tenant org User/Admin) apply tenant and role in
+    session then navigate to institutional sign-in in the same browser tab. Optional cold loads
+    may use query param osac-entry so the app can set tenant and role before sign-in; after first
+    load the app removes osac-entry from the address bar via replaceState.
   query_param: osac-entry
+  browser_history:
+    description: >-
+      Navigation from welcome to sign-in uses pushState (not a session-only redirect from /)
+      so the browser Back control returns to the welcome route. The root path must render the
+      welcome step when the user navigates back. Cold loads with osac-entry apply session from
+      the query, strip osac-entry via replaceState on the same history entry, then push sign-in
+      once so Back still reaches welcome.
   allowed_values:
     - northstar-user
     - northstar-admin
@@ -42,38 +48,42 @@ routing_matrix:
     next_step: wrs_role_selected_pre_auth
     then: auth_sign_in_form
   - choice: Northstar Bank — User
-    browser_target: new_tab
+    browser_target: same_tab
     tenant_id: northstar
     role: tenantUser
     osac_entry: northstar-user
-    next_step: auth_sign_in_form
+    next_step: wrs_role_selected_pre_auth
+    then: auth_sign_in_form
   - choice: Northstar Bank — Admin
-    browser_target: new_tab
+    browser_target: same_tab
     tenant_id: northstar
     role: tenantAdmin
     osac_entry: northstar-admin
-    next_step: auth_sign_in_form
+    next_step: wrs_role_selected_pre_auth
+    then: auth_sign_in_form
   - choice: Bluestone Financial Group — User
-    browser_target: new_tab
+    browser_target: same_tab
     tenant_id: evergreen
     role: tenantUser
     osac_entry: evergreen-user
-    next_step: auth_sign_in_form
+    next_step: wrs_role_selected_pre_auth
+    then: auth_sign_in_form
   - choice: Bluestone Financial Group — Admin
-    browser_target: new_tab
+    browser_target: same_tab
     tenant_id: evergreen
     role: tenantAdmin
     osac_entry: evergreen-admin
-    next_step: auth_sign_in_form
+    next_step: wrs_role_selected_pre_auth
+    then: auth_sign_in_form
 
 steps:
   - id: wrs_welcome_landing
-    title: Welcome to OSAC
+    title: Red Hat OSAC Prototypes
     goal: Choose provider console or a tenant organization entry persona (user vs admin) for the demo.
 
     content:
-      heading_h1: Welcome to OSAC
-      lede: Choose the provider console or an organization, then sign in as a user or admin.
+      heading_h1: Red Hat OSAC Prototypes
+      lede: Choose a role, then pick an organization where applicable.
       demo_alert:
         title: Demo entry — not a customer sign-in page
         body_paragraphs:
@@ -82,22 +92,44 @@ steps:
             their organization-branded URL (for example Northstar Bank or Bluestone Financial Group)
             and sign in through the identity provider the cloud administrator configured during onboarding.
           - >-
-            Each organization card below simulates a separate tenant so you can show multi-tenant
-            isolation in the VM workspace.
-      provider_card:
-        title: Provider Admin
-        copy: Manage platform services, tenants, and global policies for the OSAC environment.
-        primary_action_label: Enter
-      org_card_copy: >-
-        User opens the VM-as-a-Service workspace. Admin opens tenant administration for this organization.
+            Each column simulates a separate persona path so you can show multi-tenant isolation
+            in the VM workspace.
+      role_columns:
+        provider_admin:
+          title: Provider Admin
+          icon: crown (PatternFly CrownIcon in circular badge)
+          copy: Manage platform services, tenants, and global policies for the OSAC environment.
+          primary_action_label: Enter
+        tenant_admin:
+          title: Tenant Admin
+          icon: users (PatternFly UsersIcon in circular badge)
+          copy: Configure organization resources, users, quotas, and shared services.
+          tenant_actions:
+            - label: Northstar Bank
+            - label: Bluestone Financial Group
+        tenant_user:
+          title: Tenant User
+          icon: user (PatternFly UserIcon in circular badge)
+          copy: Access the VM-as-a-Service workspace to create and manage your virtual machines.
+          tenant_actions:
+            - label: Northstar Bank
+            - label: Bluestone Financial Group
 
     ui:
       components:
-        - PageLayout
+        - main
+        - Title
+        - Content
         - Alert
-        - Card
+        - Flex
         - Button
         - ThemeToggle
+        - img (Red Hat logo, /red-hat-logo.svg)
+        - PatternFly icons (CrownIcon, UsersIcon, UserIcon) in role badges
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 8
 
     states:
       - ready
@@ -105,17 +137,17 @@ steps:
       - theme_dark
 
     interactions:
-      - Click Enter on Provider Admin card to select provider persona and Vertexa tenant context in this same tab.
-      - Click User on Northstar Bank or Bluestone Financial Group to open a new browser tab with osac-entry set for that tenant and tenant user role; this tab remains on the welcome page.
-      - Click Admin on an organization card to open a new browser tab with osac-entry set for that tenant and tenant admin role; this tab remains on the welcome page.
+      - Click Enter under Provider Admin to select provider persona and Vertexa tenant context in this same tab.
+      - Under Tenant User, click Northstar Bank or Bluestone Financial Group to select that tenant and tenant user role, then navigate to institutional sign-in.
+      - Under Tenant Admin, click Northstar Bank or Bluestone Financial Group to select that tenant and tenant admin role, then navigate to institutional sign-in.
       - Toggle landing light/dark theme.
 
   - id: wrs_role_selected_pre_auth
     title: Institution and persona locked (pre-auth) — same tab only
     goal: >-
       In the current tab only: application holds selectedDemoTenant, demoShellRole, and
-      default nav target before sign-in. Used for Provider Admin (Vertexa) path only;
-      tenant org selections do not use this step in the original tab because they open a new tab.
+      default nav target before sign-in. Applies after any welcome persona selection
+      (Provider Admin, tenant org User, or tenant org Admin) before routing to sign-in.
 
     ui:
       components:
@@ -123,9 +155,13 @@ steps:
 
     states:
       - provider_admin_vertexa
+      - tenant_user_northstar
+      - tenant_admin_northstar
+      - tenant_user_evergreen
+      - tenant_admin_evergreen
 
     interactions:
-      - Implicit when provider admin Enter completes in the same tab.
+      - Implicit when a welcome card action completes in the same tab before navigation to sign-in.
 
 transitions:
   - from: wrs_welcome_landing
@@ -133,13 +169,13 @@ transitions:
     browser_target: same_tab
     to: wrs_role_selected_pre_auth
   - from: wrs_welcome_landing
-    action: click organization user on northstar or bluestone card (new tab)
-    browser_target: new_tab
-    to: auth_sign_in_form
+    action: click organization user on northstar or bluestone card (same tab)
+    browser_target: same_tab
+    to: wrs_role_selected_pre_auth
   - from: wrs_welcome_landing
-    action: click organization admin on northstar or bluestone card (new tab)
-    browser_target: new_tab
-    to: auth_sign_in_form
+    action: click organization admin on northstar or bluestone card (same tab)
+    browser_target: same_tab
+    to: wrs_role_selected_pre_auth
   - from: wrs_role_selected_pre_auth
     action: route to institutional sign-in screen (same tab)
     browser_target: same_tab

@@ -6,8 +6,8 @@ rbac_ref: ../rbac.yaml
 context:
   role: null
   tenantId: null
-  username: ""
-  password: ""
+  username: ''
+  password: ''
   trustedIssuersLoaded: false
   isLoading: false
 

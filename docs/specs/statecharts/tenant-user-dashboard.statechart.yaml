@@ -16,7 +16,6 @@ states:
       - view_dashboard
       - open_create_vm
       - view_my_vms
-      - view_recent_activities
     on:
       CLICK_CREATE_VIRTUAL_MACHINE:
         target: cvm_modal_open
@@ -27,9 +26,6 @@ states:
       CLICK_POWER_STATE_CARD:
         target: mvm_list_view
         guard: can(role, "view_my_vms")
-      OPEN_RECENT_ACTIVITIES:
-        target: ra_activity_feed
-        guard: can(role, "view_recent_activities")
 
   tud_sparse_placeholder_page:
     permissions:
@@ -44,6 +40,6 @@ states:
 
 ai-hints:
   summary: >-
-    Tenant user home machine that routes to create VM, VM list, and activity feed.
+    Tenant user home machine that routes to create VM and VM list; recent activities open from the shell masthead, not from this dashboard.
   impossibleStates:
     - role=providerAdmin and initial=tud_dashboard_home

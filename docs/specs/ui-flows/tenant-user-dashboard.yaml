@@ -7,7 +7,6 @@ rbac:
       view_dashboard: view_dashboard
       open_create_vm_modal: open_create_vm
       open_my_vms: view_my_vms
-      open_recent_activities: view_recent_activities
     tud_sparse_placeholder_page:
       open_sparse_nav_page: navigate_shell_sections
 
@@ -18,17 +17,22 @@ applies_when: >-
 steps:
   - id: tud_dashboard_home
     title: VM workspace dashboard
-    goal: Summarize fleet VM counts by power state, utilization, and quota; launch create VM or drill into lists.
+    goal: Summarize fleet VM counts by power state; launch create VM or drill into My VMs with filters.
 
     ui:
       components:
         - PageSection
+        - PageHeader
+        - Gallery
         - Title
         - Button
         - Card
-        - Gallery
-        - DashboardVmUtilizationSection
-        - DashboardVmQuotaSection
+        - Content
+        - CreateVmWizard
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -42,7 +46,6 @@ steps:
       - Click Create virtual machine to open create VM modal wizard at deployment step.
       - Click All VMs stat card to navigate My VMs without power filter.
       - Click Running Paused or Stopped stat cards to navigate My VMs with matching power filter intent.
-      - Open recent activities via utilization section callback where wired.
 
   - id: tud_sparse_placeholder_page
     title: Sparse shell page for unknown or non-dashboard nav
@@ -52,6 +55,10 @@ steps:
       components:
         - PageSection
         - Title
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 0
 
     states:
       - ready
@@ -76,9 +83,6 @@ transitions:
   - from: tud_dashboard_home
     action: click create virtual machine
     to: cvm_modal_open
-  - from: tud_dashboard_home
-    action: open recent activities from utilization section
-    to: ra_activity_feed
   - from: shell_primary_workspace
     action: tenant user selects non implemented primary nav
     to: tud_sparse_placeholder_page

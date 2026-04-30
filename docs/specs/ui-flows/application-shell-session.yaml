@@ -42,14 +42,21 @@ steps:
     ui:
       components:
         - PageShell
+        - Page
+        - PageSection
+        - Stack
+        - Flex
         - Masthead
         - MastheadLogo
         - Dropdown
         - Label
         - Toolbar
         - SidebarNav
-        - PageSection
         - ThemeToggle
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 2
 
     states:
       - ready

@@ -5,6 +5,10 @@
 import {
   Button,
   Content,
+  Flex,
+  PageSection,
+  Stack,
+  StackItem,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
@@ -52,16 +56,13 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                   </DrawerActions>
                 </DrawerHead>
                 <DrawerPanelBody>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--pf-t--global--spacer--sm)',
-                      marginBottom: 'var(--pf-t--global--spacer--md)',
-                    }}
+                  <Flex
+                    alignItems={{ default: 'alignItemsCenter' }}
+                    spaceItems={{ default: 'spaceItemsSm' }}
+                    style={{ marginBottom: 'var(--pf-t--global--spacer--md)' }}
                   >
                     <VmStatusLabel state={effectiveState} />
-                    <div style={{ display: 'flex', gap: 'var(--pf-t--global--spacer--xs)' }}>
+                    <Flex spaceItems={{ default: 'spaceItemsXs' }}>
                       {effectiveState !== 'running' && (
                         <Button variant="secondary" size="sm" onClick={() => onPower('start')}>
                           Start
@@ -75,8 +76,8 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                       <Button variant="secondary" size="sm" onClick={() => onPower('restart')}>
                         Restart
                       </Button>
-                    </div>
-                  </div>
+                    </Flex>
+                  </Flex>
 
                   <Tabs
                     activeKey={activeTab}
@@ -84,11 +85,16 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                     className="osac-vm-detail-tabs"
                   >
                     <Tab eventKey={0} title={<TabTitleText>Overview</TabTitleText>}>
-                      <div style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}>
+                      <PageSection
+                        hasBodyWrapper={false}
+                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
+                      >
                         <DescriptionList isCompact>
                           <DescriptionListGroup>
                             <DescriptionListTerm>Name</DescriptionListTerm>
-                            <DescriptionListDescription>{vm.metadata.name}</DescriptionListDescription>
+                            <DescriptionListDescription>
+                              {vm.metadata.name}
+                            </DescriptionListDescription>
                           </DescriptionListGroup>
                           <DescriptionListGroup>
                             <DescriptionListTerm>Status</DescriptionListTerm>
@@ -104,7 +110,9 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                           </DescriptionListGroup>
                           <DescriptionListGroup>
                             <DescriptionListTerm>vCPU</DescriptionListTerm>
-                            <DescriptionListDescription>{vm.spec.cores ?? '—'}</DescriptionListDescription>
+                            <DescriptionListDescription>
+                              {vm.spec.cores ?? '—'}
+                            </DescriptionListDescription>
                           </DescriptionListGroup>
                           <DescriptionListGroup>
                             <DescriptionListTerm>Memory</DescriptionListTerm>
@@ -115,7 +123,9 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                           {vm.description && (
                             <DescriptionListGroup>
                               <DescriptionListTerm>Description</DescriptionListTerm>
-                              <DescriptionListDescription>{vm.description}</DescriptionListDescription>
+                              <DescriptionListDescription>
+                                {vm.description}
+                              </DescriptionListDescription>
                             </DescriptionListGroup>
                           )}
                           <DescriptionListGroup>
@@ -127,11 +137,14 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                             </DescriptionListDescription>
                           </DescriptionListGroup>
                         </DescriptionList>
-                      </div>
+                      </PageSection>
                     </Tab>
 
                     <Tab eventKey={1} title={<TabTitleText>Networking</TabTitleText>}>
-                      <div style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}>
+                      <PageSection
+                        hasBodyWrapper={false}
+                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
+                      >
                         <DescriptionList isCompact>
                           <DescriptionListGroup>
                             <DescriptionListTerm>IP address</DescriptionListTerm>
@@ -152,24 +165,34 @@ export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) 
                             </DescriptionListDescription>
                           </DescriptionListGroup>
                         </DescriptionList>
-                      </div>
+                      </PageSection>
                     </Tab>
 
                     <Tab eventKey={2} title={<TabTitleText>Conditions</TabTitleText>}>
-                      <div style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}>
+                      <PageSection
+                        hasBodyWrapper={false}
+                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
+                      >
                         {vm.status.conditions && vm.status.conditions.length > 0 ? (
-                          vm.status.conditions.map((c, i) => (
-                            <Content key={i} component="p">
-                              <strong>{c.type}:</strong> {c.status}
-                              {c.message ? ` — ${c.message}` : ''}
-                            </Content>
-                          ))
+                          <Stack hasGutter>
+                            {vm.status.conditions.map((c, i) => (
+                              <StackItem key={i}>
+                                <Content component="p">
+                                  <strong>{c.type}:</strong> {c.status}
+                                  {c.message ? ` — ${c.message}` : ''}
+                                </Content>
+                              </StackItem>
+                            ))}
+                          </Stack>
                         ) : (
-                          <Content component="p" style={{ color: 'var(--pf-t--global--text--color--subtle)' }}>
+                          <Content
+                            component="p"
+                            style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
+                          >
                             No conditions reported.
                           </Content>
                         )}
-                      </div>
+                      </PageSection>
                     </Tab>
                   </Tabs>
                 </DrawerPanelBody>

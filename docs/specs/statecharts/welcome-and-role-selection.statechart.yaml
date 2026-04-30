@@ -21,11 +21,11 @@ states:
       ENTER_PROVIDER_ADMIN:
         target: wrs_role_selected_pre_auth
         guard: can(role, "choose_persona")
-      OPEN_ORG_USER_NEW_TAB:
-        target: auth_sign_in_form
+      OPEN_ORG_USER:
+        target: wrs_role_selected_pre_auth
         guard: can(role, "choose_persona")
-      OPEN_ORG_ADMIN_NEW_TAB:
-        target: auth_sign_in_form
+      OPEN_ORG_ADMIN:
+        target: wrs_role_selected_pre_auth
         guard: can(role, "choose_persona")
       TOGGLE_THEME:
         target: wrs_welcome_landing
@@ -44,8 +44,11 @@ states:
 
 ai-hints:
   summary: >-
-    Entry machine for persona and tenant bootstrap. Provider Admin uses same-tab route through
-    wrs_role_selected_pre_auth. Tenant user/admin paths open a new tab and continue at auth_sign_in_form.
+    Entry machine for persona and tenant bootstrap. Every welcome choice uses the same tab:
+    ENTER_PROVIDER_ADMIN, OPEN_ORG_USER, and OPEN_ORG_ADMIN transition through
+    wrs_role_selected_pre_auth before ROUTE_TO_SIGN_IN reaches auth_sign_in_form.
+    Prototype routing keeps / on the history stack when advancing to sign-in so browser Back
+    can return to wrs_welcome_landing without session-only redirects from / trapping the user.
   impossibleStates:
     - role=providerAdmin with browserTarget=new_tab
     - role=tenantUser and tenantId=vertexa

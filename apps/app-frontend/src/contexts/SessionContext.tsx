@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { DemoShellRole, DemoTenantId } from '@osac/api-contracts'
 import { demoLoginEmailForRole } from '@osac/api-contracts'
 
@@ -38,12 +45,14 @@ interface SessionContextValue {
   loginEmail: string
   // Actions
   selectProviderAdmin: () => void
-  openTenantInNewTab: (tenant: DemoTenantId, role: DemoShellRole) => void
+  selectTenantPersona: (tenant: DemoTenantId, role: DemoShellRole) => void
   loginSuccess: () => void
   logout: () => void
   setIsDarkTheme: (dark: boolean) => void
   openTopologyDetailRequest: (vmId: string) => void
   clearTopologyDetailRequest: () => void
+  /** One-shot for cold `?osac-entry=` loads; Welcome uses this so Back from sign-in is not trapped. */
+  consumeInitialOsacEntryDeepLinkRedirect: () => boolean
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null)
@@ -64,13 +73,12 @@ export function SessionProvider({
   onNavigateToWelcome,
 }: SessionProviderProps) {
   const osacEntry = useRef(readOsacEntry())
+  const osacEntryWelcomeRedirectConsumedRef = useRef(false)
 
   const [selectedTenant, setSelectedTenant] = useState<DemoTenantId | null>(
     () => osacEntry.current?.tenant ?? null,
   )
-  const [role, setRole] = useState<DemoShellRole>(
-    () => osacEntry.current?.role ?? 'tenantUser',
-  )
+  const [role, setRole] = useState<DemoShellRole>(() => osacEntry.current?.role ?? 'tenantUser')
   const roleRef = useRef<DemoShellRole>(role)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoginLoading, setIsLoginLoading] = useState(false)
@@ -91,7 +99,9 @@ export function SessionProvider({
   })
 
   // Sync roleRef
-  useState(() => { roleRef.current = role })
+  useState(() => {
+    roleRef.current = role
+  })
 
   // Theme sync to DOM
   useLayoutEffect(() => {
@@ -110,8 +120,7 @@ export function SessionProvider({
     }
   }, [isLoggedIn, selectedTenant])
 
-  const loginEmail =
-    selectedTenant ? demoLoginEmailForRole(selectedTenant, role) : ''
+  const loginEmail = selectedTenant ? demoLoginEmailForRole(selectedTenant, role) : ''
 
   const selectProviderAdmin = useCallback(() => {
     setSelectedTenant('vertexa')
@@ -119,12 +128,11 @@ export function SessionProvider({
     roleRef.current = 'providerAdmin'
   }, [])
 
-  const openTenantInNewTab = useCallback((tenant: DemoTenantId, r: DemoShellRole) => {
+  const selectTenantPersona = useCallback((tenant: DemoTenantId, r: DemoShellRole) => {
     if (tenant === 'vertexa') return
-    const slug = r === 'tenantAdmin' ? `${tenant}-admin` : `${tenant}-user`
-    const url = new URL(window.location.href)
-    url.searchParams.set('osac-entry', slug)
-    window.open(url.toString(), '_blank', 'noopener,noreferrer')
+    setSelectedTenant(tenant)
+    setRole(r)
+    roleRef.current = r
   }, [])
 
   const loginSuccess = useCallback(() => {
@@ -155,6 +163,13 @@ export function SessionProvider({
 
   const clearTopologyDetailRequest = useCallback(() => setTopologyDetailRequest(null), [])
 
+  const consumeInitialOsacEntryDeepLinkRedirect = useCallback(() => {
+    if (!osacEntry.current) return false
+    if (osacEntryWelcomeRedirectConsumedRef.current) return false
+    osacEntryWelcomeRedirectConsumedRef.current = true
+    return true
+  }, [])
+
   return (
     <SessionContext.Provider
       value={{
@@ -166,12 +181,13 @@ export function SessionProvider({
         topologyDetailRequest,
         loginEmail,
         selectProviderAdmin,
-        openTenantInNewTab,
+        selectTenantPersona,
         loginSuccess,
         logout,
         setIsDarkTheme,
         openTopologyDetailRequest,
         clearTopologyDetailRequest,
+        consumeInitialOsacEntryDeepLinkRedirect,
       }}
     >
       {children}

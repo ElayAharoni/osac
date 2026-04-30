@@ -91,6 +91,19 @@ code_target:
       use_for: CSP, auth/session patterns, static + API same-origin style, health endpoints.
 
 spec_hierarchy:
+  agent_default_workflow:
+    rule: >-
+      Default agent behavior is to update or add related specs before implementing dependent
+      code changes. This is a default operating mode, not a mandatory repository-wide gate.
+    override: >-
+      If the user explicitly requests a different order (for example code-only or direct
+      code edits first), follow the user instruction and document any intentional spec delta.
+    preferred_sequence:
+      - Read request and identify related docs/specs files
+      - Update relevant specs when needed for the requested change
+      - Validate schema/spec consistency when applicable
+      - Implement code to match intended spec behavior
+      - Verify build/tests and call out intentional deltas
   ui_catalog:
     source: FLOW-INDEX.yaml
     rule: >-
@@ -125,6 +138,7 @@ implementation_phases:
       - Add pnpm workspace root (package.json, pnpm-workspace.yaml with apps/* and libs/*, lockfile). Do **not** require Turborepo.
       - Add root scripts (or a thin Makefile) that orchestrate libs and apps via `pnpm --filter` / `pnpm -r` as needed.
       - Add libs/config (eslint, prettier, tsconfig base) consumed by all TS apps and libs.
+      - Ensure each linted workspace exposes ESLint v9 flat config (eslint.config.js) directly or imports from libs/config.
     gates:
       - pnpm install succeeds at monorepo root.
       - pnpm exec eslint --version (or project lint script) runs from root.
@@ -209,7 +223,10 @@ traceability:
 
 acceptance_checklist:
   - Every shipped primary UI path is listed under FLOW-INDEX flows[] and implemented per its ui-flows file.
+  - Agent default workflow keeps specs and code aligned, while allowing explicit user-directed override of change order.
   - Shipped UI follows design-system.yaml (PatternFly 6, tokens, shell layout, documented a11y expectations).
+  - Structural layout prefers PatternFly primitives; raw HTML wrappers are minimized and justified when unavoidable.
+  - Automated PatternFly primitive guard passes (`pnpm check:pf-primitives`) for app/frontend and shared UI component TSX sources.
   - HTTP behavior matches backend-fulfillment.yaml for public operations the UI uses; mocks documented for gaps/private.
   - Browser never calls private fulfillment REST; private only via BFF (real or mocked).
   - pnpm test (Vitest) and Cypress E2E pass in CI.

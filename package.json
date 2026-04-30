@@ -7,6 +7,7 @@
     "dev:frontend": "pnpm --filter @osac/app-frontend run dev",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
+    "check:pf-primitives": "node scripts/check-pf-primitives.mjs",
     "test": "pnpm -r run test",
     "storybook": "pnpm --filter @osac/ui-components run storybook",
     "build-storybook": "pnpm --filter @osac/ui-components run build-storybook",

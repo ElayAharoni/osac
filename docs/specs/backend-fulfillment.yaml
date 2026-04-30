@@ -48,28 +48,28 @@ context:
       well_known_types: google.protobuf wrappers as documented in compute_instance_type.proto
 
   open_pull_requests_snapshot:
-    fetched_at: "2026-04-17"
+    fetched_at: '2026-04-17'
     note: >
       Titles only; merge may change contracts. PR #421 fixes partial PATCH semantics
       (preserve absent optional fields; FieldMask for explicit clears)—treat as the
       intended Update behavior for demo clients once merged.
     items:
       - number: 421
-        title: "MGMT-23918: Fix Update without FieldMask clearing optional spec fields"
+        title: 'MGMT-23918: Fix Update without FieldMask clearing optional spec fields'
       - number: 420
-        title: "MGMT-23970: fix blank TEMPLATE and HUB columns in ComputeInstance table output"
+        title: 'MGMT-23970: fix blank TEMPLATE and HUB columns in ComputeInstance table output'
       - number: 419
         title: "NO-ISSUE: Display identifier if object doesn't have a name"
       - number: 418
-        title: "MGMT-23786: Add users and access key APIs"
+        title: 'MGMT-23786: Add users and access key APIs'
       - number: 417
-        title: "MGMT-23785: Create Organizations server and hook in Organization management through Keycloak"
+        title: 'MGMT-23785: Create Organizations server and hook in Organization management through Keycloak'
       - number: 416
-        title: "MGMT-23941: Add explicit ClusterSpec fields for cluster configuration"
+        title: 'MGMT-23941: Add explicit ClusterSpec fields for cluster configuration'
       - number: 414
-        title: "MGMT-23769: Provide up front validation and handling of template prov…"
+        title: 'MGMT-23769: Provide up front validation and handling of template prov…'
       - number: 338
-        title: "MGMT-23543: Add template inheritance"
+        title: 'MGMT-23543: Add template inheritance'
 
   private_api_surface:
     description: >
@@ -283,11 +283,11 @@ reusable_schemas:
         type: string
   ClusterTemplate:
     allOf:
-      - $ref: "#/reusable_schemas/ClusterTemplateSummary"
+      - $ref: '#/reusable_schemas/ClusterTemplateSummary'
       - type: object
         properties:
           metadata:
-            $ref: "#/reusable_schemas/Metadata"
+            $ref: '#/reusable_schemas/Metadata'
           spec:
             type: object
           status:
@@ -298,7 +298,7 @@ reusable_schemas:
       id:
         type: string
       metadata:
-        $ref: "#/reusable_schemas/Metadata"
+        $ref: '#/reusable_schemas/Metadata'
       spec:
         type: object
         properties:
@@ -389,18 +389,18 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
           allOf:
-            - $ref: "#/reusable_schemas/PageOfT"
+            - $ref: '#/reusable_schemas/PageOfT'
             - properties:
                 items:
                   type: array
                   items:
-                    $ref: "#/reusable_schemas/ClusterTemplateSummary"
+                    $ref: '#/reusable_schemas/ClusterTemplateSummary'
       errors:
         - code: 401_UNAUTHORIZED
           description: Missing or invalid bearer token
@@ -432,7 +432,7 @@ apis:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/ClusterTemplate"
+          $ref: '#/reusable_schemas/ClusterTemplate'
       errors:
         - code: 404_NOT_FOUND
           description: Unknown template id
@@ -451,12 +451,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: compute_instances_list
     description: My VMs list with CEL filtering (name prefix, state, etc.).
@@ -468,7 +468,7 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
           - properties:
               filter:
                 example: this.metadata.name.startsWith("demo-")
@@ -485,7 +485,7 @@ apis:
             items:
               type: array
               items:
-                $ref: "#/reusable_schemas/ComputeInstance"
+                $ref: '#/reusable_schemas/ComputeInstance'
       errors:
         - code: 400_BAD_REQUEST
           description: Malformed filter or order expression
@@ -508,7 +508,7 @@ apis:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/ComputeInstance"
+          $ref: '#/reusable_schemas/ComputeInstance'
       errors:
         - code: 404_NOT_FOUND
           description: Unknown compute instance
@@ -526,7 +526,7 @@ apis:
         required: [object]
         properties:
           object:
-            $ref: "#/reusable_schemas/ComputeInstance"
+            $ref: '#/reusable_schemas/ComputeInstance'
     response:
       success:
         status: 200
@@ -534,7 +534,7 @@ apis:
           type: object
           properties:
             object:
-              $ref: "#/reusable_schemas/ComputeInstance"
+              $ref: '#/reusable_schemas/ComputeInstance'
       errors:
         - code: 403_FORBIDDEN
           description: End user attempted direct create
@@ -554,7 +554,7 @@ apis:
         description: Body is ComputeInstance; only set fields participate in implicit mask.
         properties:
           metadata:
-            $ref: "#/reusable_schemas/Metadata"
+            $ref: '#/reusable_schemas/Metadata'
           spec:
             type: object
           status:
@@ -566,7 +566,7 @@ apis:
           type: object
           properties:
             object:
-              $ref: "#/reusable_schemas/ComputeInstance"
+              $ref: '#/reusable_schemas/ComputeInstance'
       errors:
         - code: 412_PRECONDITION_FAILED
           description: lock=true and metadata.version mismatch
@@ -664,12 +664,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: subnets_crud
     description: Subnets for VM spec.subnet references.
@@ -681,12 +681,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: security_groups_crud
     description: Attachable firewall policy objects for compute instances.
@@ -698,12 +698,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: organizations_list_get
     description: Directory of tenant organizations for provider admin and org metadata.
@@ -715,12 +715,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: clusters_list_get
     description: Managed clusters inventory (kubeconfig/password are separate routes).
@@ -732,12 +732,12 @@ apis:
     request:
       schema:
         allOf:
-          - $ref: "#/reusable_schemas/ListQuery"
+          - $ref: '#/reusable_schemas/ListQuery'
     response:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/PageOfT"
+          $ref: '#/reusable_schemas/PageOfT'
 
   - name: private_compute_instances_signal
     description: >
@@ -779,4 +779,4 @@ apis:
       success:
         status: 200
         schema:
-          $ref: "#/reusable_schemas/ComputeInstance"
+          $ref: '#/reusable_schemas/ComputeInstance'

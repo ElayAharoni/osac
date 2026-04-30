@@ -1,5 +1,5 @@
 /**
- * Shared login form component — used by all three branded sign-in pages.
+ * Shared login form — used by InstitutionalSignInPage (institutional-sign-in flow).
  */
 import { useCallback, useState } from 'react'
 import {
@@ -8,6 +8,8 @@ import {
   Checkbox,
   Form,
   FormGroup,
+  InputGroup,
+  InputGroupItem,
   Spinner,
   TextInput,
 } from '@patternfly/react-core'
@@ -52,11 +54,7 @@ export function LoginForm({
   return (
     <Form onSubmit={handleSubmit}>
       {trustedIssuers && trustedIssuers.length > 0 && (
-        <Alert
-          variant="info"
-          isInline
-          title="Trusted identity providers configured"
-        >
+        <Alert variant="info" isInline title="Trusted identity providers configured">
           Sign in with any of the configured trusted issuers for this environment.
         </Alert>
       )}
@@ -74,25 +72,28 @@ export function LoginForm({
       </FormGroup>
 
       <FormGroup label="Password" fieldId="login-password">
-        <div style={{ display: 'flex', gap: 'var(--pf-t--global--spacer--xs)' }}>
-          <TextInput
-            id="login-password"
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(_e, v) => setPassword(v)}
-            isDisabled={isLoading}
-            autoComplete="current-password"
-            style={{ flex: 1 }}
-          />
-          <Button
-            variant="control"
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-            onClick={() => setShowPassword((s) => !s)}
-            isDisabled={isLoading}
-          >
-            {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
-          </Button>
-        </div>
+        <InputGroup>
+          <InputGroupItem isFill>
+            <TextInput
+              id="login-password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(_e, v) => setPassword(v)}
+              isDisabled={isLoading}
+              autoComplete="current-password"
+            />
+          </InputGroupItem>
+          <InputGroupItem>
+            <Button
+              variant="control"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => setShowPassword((s) => !s)}
+              isDisabled={isLoading}
+            >
+              {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+            </Button>
+          </InputGroupItem>
+        </InputGroup>
       </FormGroup>
 
       {showRememberMe && (
@@ -132,7 +133,10 @@ export function LoginForm({
         isInline
         onClick={onChooseAnother}
         isDisabled={isLoading}
-        style={{ marginTop: 'var(--pf-t--global--spacer--xs)', textAlign: 'center' }}
+        style={{
+          marginTop: 'var(--pf-t--global--spacer--xs)',
+          textAlign: 'center',
+        }}
       >
         Choose another institution
       </Button>

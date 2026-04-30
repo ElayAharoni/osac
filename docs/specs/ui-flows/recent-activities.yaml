@@ -15,10 +15,16 @@ steps:
     ui:
       components:
         - PageSection
+        - Stack
+        - Flex
         - Breadcrumb
         - Button
         - List
         - Label
+    ui_policy:
+      prefer_patternfly_primitives: true
+      minimize_raw_div_wrappers: true
+      max_raw_div_wrappers: 1
 
     states:
       - ready
@@ -34,9 +40,6 @@ steps:
 transitions:
   - from: shell_notifications_entry
     action: bell opens activities
-    to: ra_activity_feed
-  - from: tud_dashboard_home
-    action: open recent activities from utilization callback
     to: ra_activity_feed
   - from: ra_activity_feed
     action: click dashboard breadcrumb

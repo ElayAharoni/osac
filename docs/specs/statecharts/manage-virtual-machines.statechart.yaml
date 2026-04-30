@@ -16,12 +16,16 @@ states:
   mvm_list_view:
     permissions:
       - view_my_vms
+      - open_create_vm
       - operate_vm_power
       - clone_vm
     on:
       SELECT_VM:
         target: mvm_detail_drawer
         guard: can(role, "view_my_vms")
+      CLICK_CREATE_VIRTUAL_MACHINE:
+        target: cvm_modal_open
+        guard: can(role, "open_create_vm")
       CLONE_FROM_ACTIONS:
         target: cvm_wizard_source_clone
         guard: can(role, "clone_vm")
@@ -46,6 +50,8 @@ states:
         target: mvm_detail_drawer
         guard: can(role, "open_vm_from_topology")
 
+  cvm_modal_open:
+    external: create-virtual-machine-wizard.statechart.yaml#cvm_modal_open
   cvm_wizard_source_clone:
     external: create-virtual-machine-wizard.statechart.yaml#cvm_wizard_source_clone
   vcd_console_page:
@@ -53,6 +59,7 @@ states:
 
 ai-hints:
   summary: >-
-    VM fleet list/detail machine with lifecycle actions, cloning, topology handoff, and console launch.
+    VM fleet list/detail machine with lifecycle actions, create VM from list header, cloning,
+    topology handoff, and console launch.
   impossibleStates:
     - mvm_detail_drawer with selectedVmId=null
