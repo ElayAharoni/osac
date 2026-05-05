@@ -6,11 +6,14 @@ rbac_ref: ../rbac.yaml
 context:
   role: null
   tenantId: null
+  wizardSessionId: null
   deploymentMethod: null
   selectedTemplateId: null
   cloneSourceVmId: null
   cloneNewName: ''
   isSubmitting: false
+  bffAdvancePending: false
+  bffLastError: null
 
 initial: cvm_modal_closed
 
@@ -93,6 +96,30 @@ states:
 
 ai-hints:
   summary: >-
-    Multi-path create VM machine (new, template, clone) ending in provision flow with RBAC guards.
+    Multi-path create VM machine (new, template, clone) ending in provision with RBAC guards.
+    Modal hosts a PatternFly Wizard with WizardNav; UX flow ids (cvm_wizard_*) map to BFF activeStepId
+    strings deployment, guest-os, boot-source, compute, template, clone-source, customization, review.
+    Deployment and guest-os steps use selectable PatternFly Cards (radiogroup), not plain stacked Radios;
+    guest-os version is a FormSelect under the cards (see ui-flow step_worksheets). Boot-source uses
+    Title + intro Content then two Radios with descriptions (see ui-flow boot-source worksheet). Compute
+    uses Title + intro Content then Form with vCPU and Memory (GiB) TextInputs (see ui-flow compute worksheet).
+    Customization new path adds optional cloud-init TextArea only; template path keeps VM name, Tabs
+    with Overview summary and Switches (see ui-flow customization worksheet). Review step shows Title + confirm intro, then
+    start-after Checkbox directly under the intro and flow-specific review content: compact DescriptionList for new path, expanded sections for template/clone (see ui-flow review worksheet).
+    Template step uses OS + workload FormSelects, clear filters, search,
+    and selectable template cards with workload profile labels (see ui-flow template worksheet).
+    Clone-source step mirrors template-style card selection: New VM name input under intro, OS/state/search filters,
+    and cards with OS icon + state label and compact CPU/memory/storage + created/owner details (see ui-flow clone-source worksheet).
+    Catalog or clone-drawer entry sets BFF skipDeployment so the first ordered step may be template
+    or clone-source instead of deployment. Transitions labeled NEXT imply a successful BFF advance for
+    that step; guard UI with bffAdvancePending and surface bffLastError without leaving the step on
+    validation failure. wizardSessionId is assigned when the modal opens (session POST); cleared on
+    DELETE or successful finalize. Ephemeral routing: no URL owns machine state.
+  bff_events:
+    description: >-
+      Implementations may model BFF I/O as internal services; optional explicit events include
+      WIZARD_SESSION_CREATED, BFF_ADVANCE_OK, BFF_ADVANCE_REJECTED, BFF_FINALIZE_OK, BFF_FINALIZE_REJECTED,
+      WIZARD_SESSION_ABANDONED (modal close).
   impossibleStates:
     - deploymentMethod=clone and state=cvm_wizard_guest_os
+    - deploymentMethod=template and state=cvm_wizard_guest_os

@@ -1,6 +1,211 @@
 flow: Create virtual machine wizard
 statechart_ref: ../statecharts/create-virtual-machine-wizard.statechart.yaml
 
+applies_when: >-
+  Authenticated tenant user or tenant admin workspace. Wizard is always a Modal layered over the
+  current route; wizard progress is not represented in the URL (no path segment or query param for
+  step index). Step order, validation, and persistence of the in-progress draft are orchestrated by
+  the OSAC BFF create-vm-wizard session API (see backend-fulfillment.yaml bff_demo_osac_extensions).
+
+terminology:
+  wizard_chrome: >-
+    PatternFly 6 Wizard hosted inside Modal: WizardHeader, WizardBody with a left-hand WizardNav
+    (one WizardNavItem per ordered step for the active path), step body in the main column,
+    WizardFooter with Back / Next or Create virtual machine / Cancel grouped in a Flex row with
+    horizontal gap; footer actions are start-aligned (left). Modal must not duplicate the WizardHeader
+    close control when the wizard body is active (single close affordance). Only steps returned in the
+    BFF session ordered list are shown; clone never includes customization or guest/boot/compute steps.
+  bff_step_orchestration: >-
+    Opening the modal creates a BFF wizard session. Advancing (Next), moving back (Back), and
+    finalizing (Create virtual machine) call the BFF; the BFF validates the current step, updates a
+    server-held draft, returns structured errors on failure, and on finalize creates the compute
+    instance (mock in-memory store or proxied fulfillment when integrated). Client may optimistically
+    disable Next but must treat BFF responses as authoritative for step transitions and review summary.
+    POST /advance body includes fromStepId and draft (full WizardState-shaped object merged server-side).
+  ephemeral_wizard_routing: >-
+    No SPA route or bookmark encodes wizard state; closing the modal or calling session DELETE
+    abandons the draft. Re-open starts a new session unless a future spec adds recovery.
+  three_paths: >-
+    Exactly three deployment methods: new (from scratch), template (from catalog / global templates),
+    clone (from existing VM). Entry presets (template id, clone source id) seed the BFF session
+    without adding a fourth path.
+  client_nav_draft_sync: >-
+    While waiting for the first advance from deployment, the SPA may change draft.mode locally;
+    WizardNav order is derived from local draft.mode plus session.skipDeployment so the sidebar
+    matches the path the user selected before Next commits the draft to the BFF.
+
+canonical_bff_step_ids:
+  description: >-
+    activeStepId, advance fromStepId, WizardStep ids, and stepNav[].id use these exact strings
+    (kebab-case where noted). UI nav labels are a separate display map (see implementation STEP_LABELS).
+  ordered_by_path:
+    new: [deployment, guest-os, boot-source, compute, customization, review]
+    template: [deployment, template, customization, review]
+    clone: [deployment, clone-source, review]
+  skip_first_deployment_step:
+    when: >-
+      POST /sessions with entry=catalog and presetTemplateId (mode=template, template preselected), or
+      entry=clone_drawer with presetCloneSourceVmId (mode=clone, source name default).
+    then:
+      template_ordered: [template, customization, review]
+      clone_ordered: [clone-source, review]
+    response_flag: skipDeployment boolean true when the deployment step is omitted from ordering.
+
+step_worksheets:
+  deployment:
+    flow_anchor: cvm_wizard_deployment_details
+    bff_step_id: deployment
+    paths: [new, template, clone]
+    operate: >-
+      User selects one deployment method new | template | clone by clicking a selectable Card (or the
+      Radio in each card header); updates field draft.mode. Next sends advance(fromStepId=deployment, draft)
+      so BFF merges draft.mode.
+    look: >-
+      Three equal-height cards in a responsive grid (stack on narrow viewports, three columns from md+)
+      with icon + Radio in CardHeader, title and short description in CardBody; template card may show
+      a compact “recommended” Label. Shared layout class `osac-deploy-options` (see global.css). Nav
+      label “Select a creation method” (STEP_LABELS.deployment in app + BFF).
+    validate_client: >-
+      Next is always enabled on deployment (no local gate); rely on BFF if draft.mode were empty.
+    validate_bff: >-
+      mode required; error key mode message "Select a deployment method".
+    edge_cases: >-
+      Changing mode before first advance updates client nav order; prior answers on other-path fields
+      may remain in draft until overwritten by later steps or finalize build logic.
+
+  guest-os:
+    flow_anchor: cvm_wizard_guest_os
+    bff_step_id: guest-os
+    paths: [new]
+    operate: >-
+      User picks platform RHEL | Microsoft Windows | Other Linux via selectable Cards (same card grid
+      pattern as deployment; Radio in card header). Family ids stored in osFamilyNew are rhel, windows,
+      linux. Changing platform clears osTypeNew. “Operating system version” is a FormSelect always
+      rendered below the cards: disabled until a platform is selected, single placeholder option
+      “You need to choose an OS first.”; when enabled, placeholder “Select a version…” plus options from
+      OS_TYPES[osFamilyNew] (demo list in constants). Updates osFamilyNew and osTypeNew.
+    look: >-
+      Title + intro Content; `osac-deploy-options` card row; Card / CardHeader / CardBody / Radio /
+      PatternFly icons for RHEL and Windows (brand colors); Other Linux uses bundled asset
+      `apps/app-frontend/src/assets/guest-os-tux-linux.png` at 28×28. Reserved badge row slot on cards
+      for equal heights. FormGroup + FormSelect for version under the cards.
+    validate_client: >-
+      Next disabled unless osFamilyNew and osTypeNew non-empty.
+    validate_bff: >-
+      osFamilyNew, osTypeNew required with field-specific errors.
+    edge_cases: >-
+      Changing family clears type selection in UI when selecting a new family id.
+
+  boot-source:
+    flow_anchor: cvm_wizard_boot_source
+    bff_step_id: boot-source
+    paths: [new]
+    operate: User chooses volume | none radios; updates bootSource (volume = boot volume, none = no boot source).
+    look: >-
+      Title (h2) “Boot source”, then intro Content: “Choose how the virtual machine will start. You can
+      attach storage later if needed.” Then a radiogroup of two Radios: (1) label “Boot volume”,
+      description “Start the virtual machine with an existing disk image or volume from your workspace.”;
+      (2) label “No boot source”, description “Create an empty virtual machine and attach an ISO or volume
+      later.” Nav label “Boot source”.
+    validate_client: Next disabled until bootSource set.
+    validate_bff: bootSource required.
+    edge_cases: None special beyond BFF 400 keeps step.
+
+  compute:
+    flow_anchor: cvm_wizard_compute
+    bff_step_id: compute
+    paths: [new]
+    operate: Text inputs for vCPU and memory GiB; updates cpuNew, memoryNew (defaults seeded in draft).
+    look: >-
+      Title (h2) “Compute resources”, then intro Content: “Set vCPU and memory for this instance. Adjust to
+      match your workload.” Then Form with two FormGroups: “vCPU count” and “Memory (GiB)” with numeric-style
+      TextInputs (field ids cpu, memory). Nav label “Compute resources”.
+    validate_client: Next disabled until both trimmed non-empty.
+    validate_bff: Same non-empty string checks.
+    edge_cases: BFF parseInt on provision coerces invalid numbers to defaults for demo VM build.
+
+  template:
+    flow_anchor: cvm_wizard_template
+    bff_step_id: template
+    paths: [template]
+    operate: >-
+      FormSelect filters by template icon OS family (all | rhel | windows | linux); FormSelect filters by
+      workloadProfile (all | high-performance | analytics | machine-learning | data-processing); link or
+      button clears OS + workload + SearchInput. SearchInput matches title, description, tags. Click
+      selectable Card (or Radio in card header) sets selectedTemplateId.
+    look: >-
+      Title (h2) “Templates”, intro Content “Select a template to create your virtual machine from”, then
+      toolbar row: OS FormSelect, Workload FormSelect, “Clear filters”
+      control, SearchInput. Line showing count of templates after filters (“N template(s) available”) and
+      “Select one to continue.” Grid of Cards: OS icon top-left, Radio top-right, title, short description,
+      resource summary from template defaultCores/defaultMemoryGib, Workload Label (High performance /
+      Analytics / Machine learning / Data processing). Layout class `osac-template-cards`. Nav label “Templates”.
+    validate_client: Next disabled until selectedTemplateId set.
+    validate_bff: selectedTemplateId required; catalog membership implied by demo static list.
+    edge_cases: >-
+      Catalog entry with skipDeployment starts on template with template id preset; user may change
+      template before advance.
+
+  clone-source:
+    flow_anchor: cvm_wizard_source_clone
+    bff_step_id: clone-source
+    paths: [clone]
+    operate: >-
+      Enter cloneNewName first, then filter by OS and VM state plus search query; selectable VM cards
+      pick source (cloneSourceVmId) and can reset cloneNewName to the source-based default.
+    look: >-
+      Template-like card selection layout: New VM name TextInput directly under intro, then FormSelect
+      filters for OS and state (running/stopped/paused plus all), SearchInput, clear-filters link Button,
+      availability counter, then selectable VM cards with OS icon, Radio, VmStatusLabel near radio, name,
+      CPU/Memory/Storage key-value summary line, divider, and Created/Owner rows. Nav "Source VM".
+    validate_client: Next disabled until cloneSourceVmId and trimmed cloneNewName.
+    validate_bff: >-
+      Source VM required; name trim non-empty; source exists in fleet; fleet non-empty for clone path.
+    edge_cases: Clone drawer preset sets skipDeployment first step clone-source with default name.
+
+  customization:
+    flow_anchor: cvm_wizard_customization
+    bff_step_id: customization
+    paths: [new, template]
+    operate: >-
+      New path: optional cloudInitUserDataNew only (cloud-init YAML or script); merged on advance.
+      Template path: required templateVmName; optional headless, guestLogAccess, logDeletion (deletion
+      protection). Defaults: guestLogAccess and logDeletion true, headless false. BFF finalize for new maps
+      non-empty cloudInitUserDataNew to spec.userData; new VM display name is generated (no hostname field
+      on customization).
+    look: >-
+      Title (h2) “Customization”. New path: intro Content “Optional cloud-init user data. Leave blank to
+      use defaults on create.” then Form with “Cloud-init user data (optional)” TextArea only. Template
+      path: intro Content “Customize your virtual machine by exploring the tabs below.”, then Form with
+      required “Virtual machine name” TextInput, then Tabs: Overview (compact DescriptionList rows
+      Template/CPU/Memory/Storage/Network plus three Switches: Headless mode, Guest system log access,
+      Deletion protection); Storage, Network, SSH, Scheduling, Initial run, Metadata (placeholder copy
+      only in demo). Nav label “Customization”.
+    validate_client: Template path Next disabled until templateVmName trimmed non-empty; new path always enabled.
+    validate_bff: templateVmName required when draft.mode template only.
+    edge_cases: Clone path skips this step entirely.
+
+  review:
+    flow_anchor: cvm_wizard_review_create
+    bff_step_id: review
+    paths: [new, template, clone]
+    operate: >-
+      Read-only review content varies by flow: new uses compact DescriptionList, while template and
+      clone use ExpandableSection + DescriptionList/content. startAfterCreate toggle remains available;
+      primary becomes Create virtual machine; finalize POST sends draft; success closes modal and provisions VM.
+    look: >-
+      Title (h2) “Review and create” (nav label remains “Review”). Intro Content: “Confirm the choices below,
+      then create the virtual machine.” Then Checkbox “Start this virtual machine after creation”
+      (binds startAfterCreate), then flow-specific summary. New path keeps a compact DescriptionList
+      (operating system, boot source, vCPU, memory, cloud-init user data). Template path renders expanded
+      sections that mirror customization tabs: Overview, Storage, Network, SSH, Scheduling, Initial run,
+      Metadata. Clone path also uses the same section set, populated from the selected source VM;
+      Overview includes Deployment=Clone, new virtual machine name, and source virtual machine.
+      Footer primary “Create virtual machine”.
+    validate_client: Always allowed to attempt finalize (BFF validates full prior steps).
+    validate_bff: Re-runs validateStep over all pre-review steps in order for finalize.
+    edge_cases: BFF returns fieldErrors on finalize; UI shows Alert on review step.
+
 rbac:
   required_permissions_by_step:
     cvm_modal_closed:
@@ -38,7 +243,6 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 0
 
     states:
@@ -51,44 +255,44 @@ steps:
       - Trigger openFromCloneSource from VM actions.
 
   - id: cvm_modal_open
-    title: Create virtual machine modal with wizard
-    goal: Host PatternFly Wizard for provision paths new template or clone.
+    title: Create virtual machine modal with PatternFly Wizard
+    goal: >-
+      Host a real PatternFly Wizard (not a Progress-only stepper) for the three provision paths;
+      left WizardNav lists steps for the active path; BFF session id ties nav advances to server-side
+      draft and validation.
 
     ui:
       components:
         - Modal
         - Wizard
         - WizardHeader
+        - WizardBody
+        - WizardNav
+        - WizardNavItem
         - WizardFooter
-        - WizardStep
         - Stack
         - Flex
-      notes:
-        - WizardHeader carries a description prop with a brief one-line summary such as
-          "Configure guest OS, boot source, and resources, then review and create."
-        - The PF Wizard renders a step sidebar nav showing step names for orientation;
-          do not replace with a flat progress bar.
-        - WizardFooter shows a custom nextButtonText ("Create virtual machine" on the final step).
-        - isBackDisabled is true on the first step (deployment-details).
-        - All WizardStep children are always rendered; path-specific steps use isHidden
-          so sidebar nav indices stay stable across mode changes (no wizard key reset needed).
-          Fixed step order — deployment-details(1) guest-os(2) boot-source(3) compute(4)
-          template(5) clone-source(6) customization(7) review(8).
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
-      max_raw_div_wrappers: 1
+      max_raw_div_wrappers: 2
 
     states:
       - open
+      - bff_session_creating
       - wizard_step_active
-      - submitting
+      - bff_advance_in_flight
+      - bff_advance_rejected
+      - submitting_finalize
       - error_provision
       - success_provision
 
     interactions:
-      - Close modal via footer close or header close to discard in-progress wizard state reset on reopen.
+      - On open, POST BFF wizard session with entry context (dashboard default, catalog template id, or clone source vm id); store sessionId; render WizardNav from BFF stepNav (or equivalent) in lockstep with active step.
+      - Sequential navigation only (Back / Next); WizardNav items are not independently clickable for arbitrary jumps in the demo implementation.
+      - Next invokes BFF advance with current step id and step payload; on 4xx validation errors show inline/Alert and remain on step.
+      - Back invokes BFF back (or advance with backward intent) per BFF contract; disabled on first step of path.
+      - Close modal or Cancel abandons session (DELETE) and resets client wizard state for next open.
 
   - id: cvm_wizard_deployment_details
     title: Select a creation method
@@ -99,31 +303,18 @@ steps:
         - WizardStep
         - Card
         - CardHeader
-        - CardTitle
-        - Gallery
-        - GalleryItem
-        - Content
-        - Title
+        - CardBody
+        - Radio
+        - Flex
+        - FlexItem
         - Label
-        - PlusCircleIcon
-        - CatalogIcon
-        - CloneIcon
-      notes:
-        - Three methods rendered as selectable Card tiles in a 3-column Gallery.
-        - Each Card uses CardHeader.selectableActions with variant "single" and
-          name "deployment-method" to implement radio-group semantics.
-        - Each tile has a 44×44 icon badge (same pattern as cvm_wizard_guest_os) followed
-          by CardTitle (with an optional "Recommended" Label badge) and a description
-          Content paragraph in a column layout.
-        - "Icon colors: PlusCircleIcon (blue-400), CatalogIcon (purple-400), CloneIcon (cyan-400)."
-        - The template tile carries a compact blue Label "Recommended" next to the CardTitle.
-        - The deployment step is always shown (isHidden is false); other path steps use
-          isHidden to stay in the sidebar nav without resetting step indices.
+        - Content
+        - Stack
+        - Title
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
-      max_raw_div_wrappers: 3
+      max_raw_div_wrappers: 2
 
     states:
       - editing
@@ -131,9 +322,8 @@ steps:
       - success_method_selected
 
     interactions:
-      - Click a deployment method card tile (Create new / From template / Clone existing VM).
-      - Default selection is "template"; no Next gate — any selection enables Next.
-      - Click Next to proceed to the first step of the selected path.
+      - Select one deployment method by card click or Radio; draft.mode drives ordered steps before first advance.
+      - Click Next; BFF advance validates mode and returns the next activeStepId + stepNav for the chosen path (new, template, or clone).
 
   - id: cvm_wizard_guest_os
     title: Guest operating system
@@ -144,34 +334,21 @@ steps:
         - WizardStep
         - Card
         - CardHeader
-        - CardTitle
-        - Gallery
-        - Form
+        - CardBody
+        - Radio
+        - Flex
+        - FlexItem
+        - Content
         - FormGroup
         - FormSelect
         - FormSelectOption
-        - Content
+        - Stack
         - Title
-        - RedhatIcon
-        - WindowsIcon
-        - LinuxIcon
-      notes:
-        - OS family is chosen via a 3-column Gallery of selectable Card tiles.
-        - Each Card uses CardHeader.selectableActions with variant "single" and
-          name "guest-os-family" to implement radio-group semantics within the card.
-        - Each Card tile shows an icon badge (44×44 rounded container with
-          brand-colored icon) alongside CardTitle and a brief description Content.
-        - "Three families: RHEL (RedhatIcon), Microsoft Windows (WindowsIcon),
-          Other Linux (LinuxIcon). See terminology.os_families for full content."
-        - Selecting a family resets guestOsType to empty and enables the
-          FormSelect below the card grid.
-        - FormSelect is disabled until a family is selected; placeholder text
-          changes from "Select a guest operating system first" to "Select a type".
+        - img
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
-      max_raw_div_wrappers: 1
+      max_raw_div_wrappers: 2
 
     states:
       - hidden_when_not_new
@@ -180,10 +357,8 @@ steps:
       - success_selection_complete
 
     interactions:
-      - Click an OS family card tile (RHEL / Microsoft Windows / Other Linux) to
-        select family; clears OS type selection.
-      - Select OS version from the FormSelect (enabled only after family chosen).
-      - Click Next only when both family and type are non-empty.
+      - Select guest OS platform via card (or Radio in card); pick OS version from FormSelect when enabled.
+      - Click Next when both family and type set; BFF validates before advancing (client-side enablement mirrors required fields).
 
   - id: cvm_wizard_boot_source
     title: Boot source
@@ -192,13 +367,13 @@ steps:
     ui:
       components:
         - WizardStep
-        - Form
+        - Title
+        - Content
         - Radio
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -208,8 +383,8 @@ steps:
       - success_choice_selected
 
     interactions:
-      - Select boot volume or no boot source radio.
-      - Click Next when choice selected.
+      - Read step heading and intro; select Boot volume or No boot source (each Radio has a body description).
+      - Click Next when choice selected; BFF validates boot source choice before advancing.
 
   - id: cvm_wizard_compute
     title: Compute resources
@@ -218,6 +393,8 @@ steps:
     ui:
       components:
         - WizardStep
+        - Title
+        - Content
         - Form
         - FormGroup
         - TextInput
@@ -225,7 +402,6 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -235,25 +411,33 @@ steps:
       - success_inputs_non_blank
 
     interactions:
-      - Edit vCPU and memory fields non-empty required for Next.
+      - Read step heading and intro; edit vCPU and memory fields (non-empty required for Next); BFF validates before advancing.
 
   - id: cvm_wizard_template
     title: Templates
-    goal: Search filter and select a catalog template for template path.
+    goal: Filter, search, and select a catalog template for the template path.
 
     ui:
       components:
         - WizardStep
+        - Title
+        - Content
+        - FormSelect
+        - FormSelectOption
+        - Button
         - SearchInput
-        - Dropdown
-        - Gallery
         - Card
+        - CardHeader
+        - CardBody
+        - Radio
+        - Flex
+        - FlexItem
+        - Label
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
-      max_raw_div_wrappers: 1
+      max_raw_div_wrappers: 2
 
     states:
       - hidden_when_not_template
@@ -263,28 +447,32 @@ steps:
       - success_template_selected
 
     interactions:
-      - Search and filter templates select one card.
-      - Click Next when selectedTemplateId set.
+      - Filter by OS and workload, optionally clear filters; search narrows list; select one template card.
+      - Click Next when selectedTemplateId set; BFF validates template id against catalog for session tenant context.
 
   - id: cvm_wizard_source_clone
     title: Source VM for clone
-    goal: Search filter by power OS pick source VM and enter new name for clone path.
+    goal: Search and pick a source VM, then enter the new VM name for the clone path.
 
     ui:
       components:
         - WizardStep
+        - Card
+        - CardHeader
+        - CardBody
+        - Radio
+        - FormSelect
+        - FormSelectOption
         - SearchInput
-        - Dropdown
+        - Button
+        - Content
         - Form
-        - FormGroup
         - TextInput
-        - Table
         - Stack
-        - Split
+        - VmStatusLabel
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 2
 
     states:
@@ -296,29 +484,35 @@ steps:
       - success_source_and_name_ready
 
     interactions:
-      - Filter clone candidates select row set new VM name trim non-empty.
-      - Click Next when cloneSourceVmId and non-empty cloneNewName and fleet non-empty.
+      - Enter New VM name under the intro (required), then filter clone candidates by OS and state, optionally clear filters, and search by text.
+      - Select a source VM card to set source and default clone name; cards show OS icon and VmStatusLabel near radio plus CPU/Memory/Storage and Created/Owner details.
+      - Click Next when cloneSourceVmId and non-empty cloneNewName and fleet non-empty; BFF validates source exists and name rules before advancing to review.
 
   - id: cvm_wizard_customization
     title: Customization
-    goal: New path hostname and cloud-init optional trim defaults on create; template path VM name required plus optional switches and tabs.
+    goal: >-
+      New path optional cloud-init user data only; template path VM name required plus Tabs (Overview
+      summary and three toggles; other tabs Storage, Network, SSH, Scheduling, Initial run, Metadata are
+      demo placeholders).
 
     ui:
       components:
         - WizardStep
+        - Title
+        - Content
         - Form
         - FormGroup
         - TextInput
         - TextArea
         - Tabs
+        - Tab
+        - TabTitleText
+        - DescriptionList
         - Switch
-        - Checkbox
         - Stack
-        - Flex
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 2
 
     states:
@@ -329,28 +523,29 @@ steps:
       - success_ready
 
     interactions:
-      - For template deployment enter virtual machine name required for Next.
-      - For new deployment hostname cloud-init optional.
-      - Adjust template-only switches headless guest log deletion protection.
+      - Read step heading and path-specific intro; for template enter virtual machine name (required for Next).
+      - For new path set optional cloud-init user data in TextArea.
+      - Template path: Tabs include Overview (read-only resource summary and Switches for headless, guest
+        system log access, deletion protection; defaults on for the latter two) plus placeholder tabs
+        Storage, Network, SSH, Scheduling, Initial run, Metadata.
+      - Next sends customization payload to BFF; BFF merges into draft and validates templateVmName when mode is template.
 
   - id: cvm_wizard_review_create
     title: Review and create
-    goal: Confirm summary and optional start after creation checkbox then provision.
+    goal: Confirm flow-specific expanded review sections and optional start-after-create checkbox, then provision.
 
     ui:
       components:
         - WizardStep
-        - DescriptionList
-        - DescriptionListGroup
-        - DescriptionListTerm
-        - DescriptionListDescription
-        - Checkbox
+        - Title
         - Content
+        - ExpandableSection
+        - Checkbox
+        - DescriptionList
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -360,8 +555,9 @@ steps:
       - success_modal_closes
 
     interactions:
-      - Toggle start VM after creation checkbox.
-      - Click Create virtual machine to invoke onSave handleProvision close modal append VM list navigate My VMs for applicable tenants.
+      - Read heading and intro, then toggle “Start this virtual machine after creation” (included in finalize payload).
+      - Inspect expanded sections rendered for current flow.
+      - Click Create virtual machine to call BFF finalize; on success close modal, invalidate VM queries / append per app patterns, navigate My VMs where applicable; on error show Alert and remain on review.
 
 transitions:
   - from: cvm_modal_closed
@@ -429,11 +625,22 @@ transitions:
     to: cvm_modal_closed
 
 validation_rules:
+  - field: bff_authoritative_validation
+    rules:
+      - rule: bff_advance_and_finalize_are_authoritative
+        note: >-
+          Client-side rules below improve UX (disable Next, inline hints). The BFF wizard session
+          advance and finalize endpoints return canonical validation errors and step boundaries; UI
+          must reconcile to BFF responses after each request.
+
   - field: guest_os_family_and_type
     when: deployment equals new
     rules:
       - rule: both_required_before_next
-        note: Next disabled until family selected and guestOsType non-empty.
+        note: >-
+          Next disabled until osFamilyNew set (card selection) and osTypeNew non-empty; version
+          FormSelect stays visible but disabled with “You need to choose an OS first.” until a platform
+          is chosen.
   - field: boot_source
     when: deployment equals new
     rules:
@@ -457,39 +664,10 @@ validation_rules:
     when: deployment equals template on customization step
     rules:
       - rule: trim_non_empty_required
-  - field: hostname
+  - field: cloud_init_user_data
     when: deployment equals new
     rules:
-      - rule: optional_trim
-        note: Empty hostname falls back to generated id on provision in buildTenantVmFromModalNewPayload.
-
-terminology:
-  os_families:
-    - key: rhel
-      title: RHEL
-      icon: RedhatIcon
-      description: >-
-        Red Hat Enterprise Linux for production workloads with long-term support.
-      os_types:
-        - Red Hat Enterprise Linux 9.5
-        - Red Hat Enterprise Linux 9.4
-        - Red Hat Enterprise Linux 8.10
-    - key: windows
-      title: Microsoft Windows
-      icon: WindowsIcon
-      description: >-
-        Windows Server or client images for Microsoft-based applications.
-      os_types:
-        - Microsoft Windows Server 2025
-        - Microsoft Windows Server 2022
-        - Microsoft Windows 11
-    - key: other-linux
-      title: Other Linux
-      icon: LinuxIcon
-      description: >-
-        Community and third-party Linux distributions such as Ubuntu or Debian.
-      os_types:
-        - Ubuntu 24.04 LTS
-        - Debian 12
-        - Fedora 41
-        - CentOS Stream 9
+      - rule: optional_multiline
+        note: >-
+          Empty cloudInitUserDataNew is omitted; non-empty value is passed on draft and mapped to
+          spec.userData on finalize (demo BFF).

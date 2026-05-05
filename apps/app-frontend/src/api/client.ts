@@ -44,11 +44,19 @@ export function getComputeInstance(id: string): Promise<ComputeInstance> {
   return request<ComputeInstance>(`/compute_instances/${id}`)
 }
 
-export function createComputeInstance(vm: Partial<ComputeInstance>): Promise<ComputeInstance> {
-  return request<ComputeInstance>('/compute_instances', {
+export async function createComputeInstance(vm: Partial<ComputeInstance>): Promise<ComputeInstance> {
+  const res = await fetch(`${BASE}/compute_instances`, {
     method: 'POST',
-    body: JSON.stringify(vm),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object: vm }),
   })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  const data = (await res.json()) as { object?: ComputeInstance }
+  if (!data.object) throw new Error('API: missing object in create response')
+  return data.object
 }
 
 export function patchComputeInstance(

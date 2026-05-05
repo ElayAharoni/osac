@@ -13,10 +13,13 @@ export interface WizardState {
   bootSource: 'volume' | 'none' | null
   cpuNew: string
   memoryNew: string
-  hostnameNew: string
+  /** Optional cloud-init / user-data for new path; BFF may map to spec.userData when non-empty. */
+  cloudInitUserDataNew: string
   selectedTemplateId: string | null
   templateVmName: string
   headless: boolean
+  /** When true, guest serial/console logs remain accessible in the demo UX. */
+  guestLogAccess: boolean
   logDeletion: boolean
   cloneSourceVmId: string | null
   cloneNewName: string

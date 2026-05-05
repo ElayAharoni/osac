@@ -156,7 +156,12 @@ flow_component_mapping:
     - logical: Modal
       patternfly: Modal, Modal variants
     - logical: Wizard
-      patternfly: Wizard or Modal with multi-step footer
+      patternfly: >-
+        PatternFly Wizard (WizardHeader, WizardBody, WizardFooter) hosted inside Modal when the flow
+        requires a dialog; use WizardNav + WizardNavItem for the left-hand step navigation rail
+        (sub-step titles, enable/disable per PF guidance). Do not replace with Progress-only steppers
+        for create-virtual-machine-wizard — that flow is specified as a real Wizard with nav rail;
+        see ui-flows/create-virtual-machine-wizard.yaml.
     - logical: Form
       patternfly: Form, FormGroup, TextInput, Checkbox, etc.
     - logical: Table

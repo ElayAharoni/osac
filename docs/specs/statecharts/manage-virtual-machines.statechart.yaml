@@ -9,6 +9,7 @@ context:
   selectedVmId: null
   listMode: cards
   powerFilter: all
+  osFilter: all
 
 initial: mvm_list_view
 
@@ -60,6 +61,14 @@ states:
 ai-hints:
   summary: >-
     VM fleet list/detail machine with lifecycle actions, create VM from list header, cloning,
-    topology handoff, and console launch.
+    topology handoff, and console launch. List view header includes helper description, right-aligned
+    create button, separator, then filter row (name search + status dropdown all/running/stopped/paused
+    + OS dropdown on left, compact icon-only cards/table toggle on right). Card mode uses bordered cards
+    with larger OS icon top-left, Console outline label + VmStatusLabel + actions menu top-right,
+    VM name below header row, description, CPU/Memory/Storage key-above-value row, divider, then
+    IP address and Created inline rows. Selecting a row/card swaps list layout to full-detail page
+    layout with upper-left breadcrumb (My VMs -> VM name), large primary tabbed properties card,
+    smaller right-side console card (status, launch button, actions menu). Actions menus expose
+    start stop restart clone migrate delete with state-aware disabled options.
   impossibleStates:
     - mvm_detail_drawer with selectedVmId=null

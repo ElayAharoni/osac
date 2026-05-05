@@ -158,6 +158,10 @@ implementation_phases:
       - >-
         Fastify app in apps/app-backend — proxy to FULFILLMENT_API_URL when set.
       - Register mock handlers for same paths where upstream or private integration is absent.
+      - >-
+        Register OSAC BFF extension routes for create-vm-wizard sessions under
+        /api/osac/bff/v1/create-vm-wizard per docs/specs/backend-fulfillment.yaml (bff_demo_osac_extensions);
+        mock mode holds sessions in process memory; document proxy behavior when fulfillment gains parity.
       - Align security headers and auth bridging with osac-ui server patterns.
       - Serve production SPA from app-backend in prod mode; expose /health (and /ready if used).
       - Image build copies prebuilt assets from apps/app-frontend into the BFF app artifact so **one container** serves API + static UI.

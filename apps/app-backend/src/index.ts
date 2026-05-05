@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { registerFulfillmentRoutes } from './routes/fulfillment.js'
 import { registerEventsRoutes } from './routes/events.js'
 import { registerConsoleRoutes } from './routes/console.js'
+import { registerCreateVmWizardRoutes } from './routes/createVmWizard.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
@@ -31,6 +32,7 @@ app.get('/ready', async () => ({ status: 'ready' }))
 await registerFulfillmentRoutes(app, { apiMode: API_MODE, fulfillmentApiUrl: FULFILLMENT_API_URL })
 await registerEventsRoutes(app, { apiMode: API_MODE })
 await registerConsoleRoutes(app, { apiMode: API_MODE })
+await registerCreateVmWizardRoutes(app)
 
 // Serve embedded SPA in production
 const spaDistDir = join(__dirname, '..', 'public')

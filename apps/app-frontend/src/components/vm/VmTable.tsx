@@ -48,6 +48,7 @@ export function VmTable({ vms, getState, onSelect, onPower, onClone }: VmTablePr
                 <div onClick={(e) => e.stopPropagation()}>
                   <VmActionsMenu
                     vm={vm}
+                    effectiveState={state}
                     onPower={(a) => onPower(vm, a)}
                     onClone={() => onClone(vm)}
                   />

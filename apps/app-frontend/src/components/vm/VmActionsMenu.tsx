@@ -1,16 +1,34 @@
 import { useState } from 'react'
 import { Dropdown, DropdownItem, DropdownList, MenuToggle } from '@patternfly/react-core'
 import { EllipsisVIcon } from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
-import type { ComputeInstance } from '@osac/api-contracts'
+import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
 
 interface VmActionsMenuProps {
   vm: ComputeInstance
+  effectiveState?: VmPowerState
   onPower: (action: 'start' | 'stop' | 'restart') => void
   onClone: () => void
+  onMigrate?: () => void
+  onDelete?: () => void
 }
 
-export function VmActionsMenu({ vm, onPower, onClone }: VmActionsMenuProps) {
+export function VmActionsMenu({
+  vm,
+  effectiveState,
+  onPower,
+  onClone,
+  onMigrate,
+  onDelete,
+}: VmActionsMenuProps) {
   const [open, setOpen] = useState(false)
+  const state = effectiveState ?? vm.status.state
+
+  const canStart = state === 'stopped'
+  const canStop = state === 'running' || state === 'paused'
+  const canRestart = state === 'running' || state === 'paused'
+  const canClone = true
+  const canMigrate = state === 'running' && typeof onMigrate === 'function'
+  const canDelete = state === 'stopped' && typeof onDelete === 'function'
 
   return (
     <Dropdown
@@ -29,31 +47,33 @@ export function VmActionsMenu({ vm, onPower, onClone }: VmActionsMenuProps) {
       popperProps={{ position: 'right' }}
     >
       <DropdownList>
-        {vm.status.state !== 'running' && (
-          <DropdownItem
-            value="start"
-            onClick={() => {
-              onPower('start')
-              setOpen(false)
-            }}
-          >
-            Start
-          </DropdownItem>
-        )}
-        {vm.status.state === 'running' && (
-          <DropdownItem
-            value="stop"
-            onClick={() => {
-              onPower('stop')
-              setOpen(false)
-            }}
-          >
-            Stop
-          </DropdownItem>
-        )}
+        <DropdownItem
+          value="start"
+          isDisabled={!canStart}
+          onClick={() => {
+            if (!canStart) return
+            onPower('start')
+            setOpen(false)
+          }}
+        >
+          Start
+        </DropdownItem>
+        <DropdownItem
+          value="stop"
+          isDisabled={!canStop}
+          onClick={() => {
+            if (!canStop) return
+            onPower('stop')
+            setOpen(false)
+          }}
+        >
+          Stop
+        </DropdownItem>
         <DropdownItem
           value="restart"
+          isDisabled={!canRestart}
           onClick={() => {
+            if (!canRestart) return
             onPower('restart')
             setOpen(false)
           }}
@@ -62,12 +82,36 @@ export function VmActionsMenu({ vm, onPower, onClone }: VmActionsMenuProps) {
         </DropdownItem>
         <DropdownItem
           value="clone"
+          isDisabled={!canClone}
           onClick={() => {
+            if (!canClone) return
             onClone()
             setOpen(false)
           }}
         >
           Clone
+        </DropdownItem>
+        <DropdownItem
+          value="migrate"
+          isDisabled={!canMigrate}
+          onClick={() => {
+            if (!canMigrate) return
+            onMigrate?.()
+            setOpen(false)
+          }}
+        >
+          Migrate
+        </DropdownItem>
+        <DropdownItem
+          value="delete"
+          isDisabled={!canDelete}
+          onClick={() => {
+            if (!canDelete) return
+            onDelete?.()
+            setOpen(false)
+          }}
+        >
+          Delete
         </DropdownItem>
       </DropdownList>
     </Dropdown>

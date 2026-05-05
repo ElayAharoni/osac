@@ -101,7 +101,9 @@ flows:
     summary: Template gallery for tenant user, tenant admin template catalog, provider global templates; opens create wizard from template.
   - id: create-virtual-machine-wizard
     file: ui-flows/create-virtual-machine-wizard.yaml
-    summary: Modal wizard — new / template / clone paths through review and provision.
+    summary: >-
+      Modal PatternFly Wizard (vertical WizardNav) — new / template / clone paths through review;
+      step transitions and finalize are BFF-driven (ephemeral session, no wizard URL routes).
   - id: manage-virtual-machines
     file: ui-flows/manage-virtual-machines.yaml
     summary: My VMs list, filters, detail drawer, power lifecycle, clone, console demo launch.

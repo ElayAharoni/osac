@@ -3,8 +3,15 @@
  * step: mvm_detail_drawer
  */
 import {
+  Breadcrumb,
+  BreadcrumbItem,
   Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
   Content,
+  Divider,
   Flex,
   PageSection,
   Stack,
@@ -13,196 +20,250 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Drawer,
-  DrawerActions,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerContentBody,
-  DrawerHead,
-  DrawerPanelBody,
-  DrawerPanelContent,
   Tab,
   Tabs,
   TabTitleText,
   Title,
 } from '@patternfly/react-core'
+import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
+import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
 import { useState } from 'react'
 import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
+import linuxMascotUrl from '../../assets/guest-os-tux-linux.png'
 import { VmStatusLabel } from '@osac/ui-components'
+import { VmActionsMenu } from './VmActionsMenu'
 
 interface Props {
   vm: ComputeInstance | null
   effectiveState: VmPowerState
   onClose: () => void
   onPower: (action: 'start' | 'stop' | 'restart') => void
+  onClone: () => void
+  onOpenConsole: () => void
 }
 
-export function VmDetailDrawer({ vm, effectiveState, onClose, onPower }: Props) {
+export function VmDetailDrawer({
+  vm,
+  effectiveState,
+  onClose,
+  onPower,
+  onClone,
+  onOpenConsole,
+}: Props) {
   const [activeTab, setActiveTab] = useState(0)
 
+  if (!vm) return null
+
+  const isConsoleAvailable = effectiveState === 'running'
+  const consoleSummary =
+    effectiveState === 'running'
+      ? 'Console is available for this virtual machine.'
+      : effectiveState === 'paused'
+        ? 'Console is unavailable while the virtual machine is paused.'
+        : 'Console is unavailable while the virtual machine is stopped.'
+
+  const osLabel = vm.os === 'rhel' ? 'RHEL' : vm.os === 'windows' ? 'Windows' : 'Linux'
+
   return (
-    <Drawer isExpanded={!!vm} isInline={false} position="right">
-      <DrawerContent
-        panelContent={
-          <DrawerPanelContent widths={{ default: 'width_33', lg: 'width_50' }}>
-            {vm && (
-              <>
-                <DrawerHead>
-                  <Title headingLevel="h2" size="xl">
-                    {vm.metadata.name}
-                  </Title>
-                  <DrawerActions>
-                    <DrawerCloseButton onClick={onClose} />
-                  </DrawerActions>
-                </DrawerHead>
-                <DrawerPanelBody>
-                  <Flex
-                    alignItems={{ default: 'alignItemsCenter' }}
-                    spaceItems={{ default: 'spaceItemsSm' }}
-                    style={{ marginBottom: 'var(--pf-t--global--spacer--md)' }}
+    <Stack hasGutter>
+      <StackItem>
+        <Breadcrumb>
+          <BreadcrumbItem>
+            <Button variant="link" isInline onClick={onClose}>
+              My VMs
+            </Button>
+          </BreadcrumbItem>
+          <BreadcrumbItem isActive>{vm.metadata.name}</BreadcrumbItem>
+        </Breadcrumb>
+      </StackItem>
+
+      <StackItem>
+        <Stack hasGutter={false}>
+          <StackItem>
+            <Title headingLevel="h1" size="2xl">
+              {vm.metadata.name}
+            </Title>
+          </StackItem>
+          {vm.description && (
+            <StackItem>
+              <Content
+                component="p"
+                style={{ color: 'var(--pf-t--global--text--color--subtle)', margin: 0 }}
+              >
+                {vm.description}
+              </Content>
+            </StackItem>
+          )}
+        </Stack>
+      </StackItem>
+
+      <StackItem>
+        <Divider />
+      </StackItem>
+
+      <StackItem>
+        <div className="osac-vm-detail-layout">
+          <Card isFullHeight className="osac-vm-detail-main-card">
+            <CardBody>
+              <Tabs
+                activeKey={activeTab}
+                onSelect={(_e, key) => setActiveTab(Number(key))}
+                className="osac-vm-detail-tabs"
+              >
+                <Tab eventKey={0} title={<TabTitleText>Overview</TabTitleText>}>
+                  <PageSection
+                    hasBodyWrapper={false}
+                    style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
                   >
-                    <VmStatusLabel state={effectiveState} />
-                    <Flex spaceItems={{ default: 'spaceItemsXs' }}>
-                      {effectiveState !== 'running' && (
-                        <Button variant="secondary" size="sm" onClick={() => onPower('start')}>
-                          Start
-                        </Button>
-                      )}
-                      {effectiveState === 'running' && (
-                        <Button variant="secondary" size="sm" onClick={() => onPower('stop')}>
-                          Stop
-                        </Button>
-                      )}
-                      <Button variant="secondary" size="sm" onClick={() => onPower('restart')}>
-                        Restart
-                      </Button>
-                    </Flex>
-                  </Flex>
-
-                  <Tabs
-                    activeKey={activeTab}
-                    onSelect={(_e, key) => setActiveTab(Number(key))}
-                    className="osac-vm-detail-tabs"
-                  >
-                    <Tab eventKey={0} title={<TabTitleText>Overview</TabTitleText>}>
-                      <PageSection
-                        hasBodyWrapper={false}
-                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
-                      >
-                        <DescriptionList isCompact>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Name</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.metadata.name}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Status</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              <VmStatusLabel state={effectiveState} />
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>OS</DescriptionListTerm>
-                            <DescriptionListDescription style={{ textTransform: 'capitalize' }}>
-                              {vm.os ?? '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>vCPU</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.spec.cores ?? '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Memory</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.spec.memoryGib ? `${vm.spec.memoryGib} GiB` : '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          {vm.description && (
-                            <DescriptionListGroup>
-                              <DescriptionListTerm>Description</DescriptionListTerm>
-                              <DescriptionListDescription>
-                                {vm.description}
-                              </DescriptionListDescription>
-                            </DescriptionListGroup>
-                          )}
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Created</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.metadata.createdAt
-                                ? new Date(vm.metadata.createdAt).toLocaleDateString()
-                                : '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                        </DescriptionList>
-                      </PageSection>
-                    </Tab>
-
-                    <Tab eventKey={1} title={<TabTitleText>Networking</TabTitleText>}>
-                      <PageSection
-                        hasBodyWrapper={false}
-                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
-                      >
-                        <DescriptionList isCompact>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>IP address</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.status.ipAddress ?? '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Subnet</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.spec.subnet ?? '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                          <DescriptionListGroup>
-                            <DescriptionListTerm>Security groups</DescriptionListTerm>
-                            <DescriptionListDescription>
-                              {vm.spec.securityGroups?.join(', ') ?? '—'}
-                            </DescriptionListDescription>
-                          </DescriptionListGroup>
-                        </DescriptionList>
-                      </PageSection>
-                    </Tab>
-
-                    <Tab eventKey={2} title={<TabTitleText>Conditions</TabTitleText>}>
-                      <PageSection
-                        hasBodyWrapper={false}
-                        style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
-                      >
-                        {vm.status.conditions && vm.status.conditions.length > 0 ? (
-                          <Stack hasGutter>
-                            {vm.status.conditions.map((c, i) => (
-                              <StackItem key={i}>
-                                <Content component="p">
-                                  <strong>{c.type}:</strong> {c.status}
-                                  {c.message ? ` — ${c.message}` : ''}
-                                </Content>
-                              </StackItem>
-                            ))}
-                          </Stack>
-                        ) : (
-                          <Content
-                            component="p"
-                            style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
+                    <DescriptionList isCompact>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Name</DescriptionListTerm>
+                        <DescriptionListDescription>{vm.metadata.name}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>OS</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          <Flex
+                            alignItems={{ default: 'alignItemsCenter' }}
+                            spaceItems={{ default: 'spaceItemsSm' }}
                           >
-                            No conditions reported.
-                          </Content>
-                        )}
-                      </PageSection>
-                    </Tab>
-                  </Tabs>
-                </DrawerPanelBody>
-              </>
-            )}
-          </DrawerPanelContent>
-        }
-      >
-        <DrawerContentBody />
-      </DrawerContent>
-    </Drawer>
+                            {vm.os === 'windows' ? (
+                              <WindowsIcon style={{ width: 16, height: 16, color: '#0078D4' }} />
+                            ) : vm.os === 'rhel' ? (
+                              <RedhatIcon style={{ width: 16, height: 16, color: '#EE0000' }} />
+                            ) : (
+                              <img
+                                src={linuxMascotUrl}
+                                alt=""
+                                width={16}
+                                height={16}
+                                style={{ objectFit: 'contain' }}
+                              />
+                            )}
+                            <span>{osLabel}</span>
+                          </Flex>
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>vCPU</DescriptionListTerm>
+                        <DescriptionListDescription>{vm.spec.cores ?? '—'}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Memory</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          {vm.spec.memoryGib ? `${vm.spec.memoryGib} GiB` : '—'}
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                      {vm.description && (
+                        <DescriptionListGroup>
+                          <DescriptionListTerm>Description</DescriptionListTerm>
+                          <DescriptionListDescription>{vm.description}</DescriptionListDescription>
+                        </DescriptionListGroup>
+                      )}
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Created</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          {vm.metadata.createdAt
+                            ? new Date(vm.metadata.createdAt).toLocaleDateString()
+                            : '—'}
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                    </DescriptionList>
+                  </PageSection>
+                </Tab>
+
+                <Tab eventKey={1} title={<TabTitleText>Networking</TabTitleText>}>
+                  <PageSection
+                    hasBodyWrapper={false}
+                    style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
+                  >
+                    <DescriptionList isCompact>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>IP address</DescriptionListTerm>
+                        <DescriptionListDescription>{vm.status.ipAddress ?? '—'}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Subnet</DescriptionListTerm>
+                        <DescriptionListDescription>{vm.spec.subnet ?? '—'}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Security groups</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          {vm.spec.securityGroups?.join(', ') ?? '—'}
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                    </DescriptionList>
+                  </PageSection>
+                </Tab>
+
+                <Tab eventKey={2} title={<TabTitleText>Conditions</TabTitleText>}>
+                  <PageSection
+                    hasBodyWrapper={false}
+                    style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
+                  >
+                    {vm.status.conditions && vm.status.conditions.length > 0 ? (
+                      <Stack hasGutter>
+                        {vm.status.conditions.map((c, i) => (
+                          <StackItem key={i}>
+                            <Content component="p">
+                              <strong>{c.type}:</strong> {c.status}
+                              {c.message ? ` — ${c.message}` : ''}
+                            </Content>
+                          </StackItem>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Content component="p" style={{ color: 'var(--pf-t--global--text--color--subtle)' }}>
+                        No conditions reported.
+                      </Content>
+                    )}
+                  </PageSection>
+                </Tab>
+              </Tabs>
+            </CardBody>
+          </Card>
+
+          <Card isFullHeight className="osac-vm-detail-console-card">
+            <CardHeader>
+              <Flex
+                justifyContent={{ default: 'justifyContentSpaceBetween' }}
+                alignItems={{ default: 'alignItemsCenter' }}
+                style={{ width: '100%' }}
+              >
+                <CardTitle>Console</CardTitle>
+                <VmActionsMenu
+                  vm={vm}
+                  effectiveState={effectiveState}
+                  onPower={onPower}
+                  onClone={onClone}
+                />
+              </Flex>
+            </CardHeader>
+            <CardBody>
+              <Stack hasGutter>
+                <StackItem>
+                  <VmStatusLabel state={effectiveState} />
+                </StackItem>
+                <StackItem>
+                  <Content component="p" style={{ margin: 0, color: 'var(--pf-t--global--text--color--subtle)' }}>
+                    {consoleSummary}
+                  </Content>
+                </StackItem>
+                <StackItem>
+                  <Button variant="primary" isBlock isDisabled={!isConsoleAvailable} onClick={onOpenConsole}>
+                    Open console
+                  </Button>
+                </StackItem>
+                <StackItem>
+                  <Content component="p" style={{ margin: 0 }}>
+                    <strong>IP address:</strong> {vm.status.ipAddress ?? '—'}
+                  </Content>
+                </StackItem>
+              </Stack>
+            </CardBody>
+          </Card>
+        </div>
+      </StackItem>
+    </Stack>
   )
 }
