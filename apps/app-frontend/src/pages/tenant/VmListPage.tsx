@@ -189,7 +189,13 @@ export function VmListPage() {
             const state = getEffectiveState(vm)
             return (
               <GalleryItem key={vm.id}>
-                <Card isClickable className="osac-dashboard-vm-stat-card">
+                {/* isClickable + isSelectable allows selectableActions (whole-card click)
+                    and actions (kebab menu) to coexist without a PF accessibility warning */}
+                <Card
+                  isClickable
+                  isSelectable
+                  className="osac-dashboard-vm-stat-card"
+                >
                   <CardHeader
                     selectableActions={{
                       onClickAction: () => setSelectedVm(vm),

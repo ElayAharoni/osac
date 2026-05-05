@@ -19,6 +19,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['@patternfly/react-charts > victory-core'],
+  },
   build: {
     outDir: '../app-backend/public',
     emptyOutDir: true,

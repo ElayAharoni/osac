@@ -11,7 +11,11 @@
     "test": "pnpm -r run test",
     "storybook": "pnpm --filter @osac/ui-components run storybook",
     "build-storybook": "pnpm --filter @osac/ui-components run build-storybook",
-    "e2e:ci": "pnpm --filter @osac/e2e run e2e:ci"
+    "e2e:ci": "pnpm --filter @osac/e2e run e2e:ci",
+    "graph:statecharts": "node scripts/statechart-graph.mjs --all --format both --out-dir docs/specs/graphs"
+  },
+  "devDependencies": {
+    "yaml": "^2.7.0"
   },
   "engines": {
     "node": ">=20",

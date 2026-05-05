@@ -7,6 +7,7 @@ rbac:
       view_dashboard: view_dashboard
       open_create_vm_modal: open_create_vm
       open_my_vms: view_my_vms
+      open_recent_activities: view_recent_activities
     tud_sparse_placeholder_page:
       open_sparse_nav_page: navigate_shell_sections
 
@@ -17,7 +18,7 @@ applies_when: >-
 steps:
   - id: tud_dashboard_home
     title: VM workspace dashboard
-    goal: Summarize fleet VM counts by power state; launch create VM or drill into My VMs with filters.
+    goal: Summarize fleet VM counts by power state, utilization trends, and quota; launch create VM or drill into lists.
 
     ui:
       components:
@@ -28,10 +29,17 @@ steps:
         - Button
         - Card
         - Content
+        - Label
+        - Dropdown
         - CreateVmWizard
+        - DashboardVmUtilizationSection
+        - DashboardVmQuotaSection
+        - LineChart
+        - DonutChart
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -41,11 +49,14 @@ steps:
       - error_load_metrics
       - success_populated
       - interaction_stat_card_hover
+      - utilization_period_selected
 
     interactions:
       - Click Create virtual machine to open create VM modal wizard at deployment step.
       - Click All VMs stat card to navigate My VMs without power filter.
       - Click Running Paused or Stopped stat cards to navigate My VMs with matching power filter intent.
+      - Select utilization time period (24h, 7d, 30d, 90d) from the period dropdown to update all four line charts.
+      - Click the Recent activities card in the utilization section to navigate to the full activity feed.
 
   - id: tud_sparse_placeholder_page
     title: Sparse shell page for unknown or non-dashboard nav
@@ -58,6 +69,7 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 0
 
     states:
@@ -83,6 +95,9 @@ transitions:
   - from: tud_dashboard_home
     action: click create virtual machine
     to: cvm_modal_open
+  - from: tud_dashboard_home
+    action: open recent activities from utilization section
+    to: ra_activity_feed
   - from: shell_primary_workspace
     action: tenant user selects non implemented primary nav
     to: tud_sparse_placeholder_page

@@ -43,10 +43,7 @@ export const institutionalBrandingByTenant: Record<DemoTenantId, InstitutionalBr
     pageBackground: 'linear-gradient(135deg, #0f1117 0%, #1a1f2e 100%)',
     titleColor: '#fff',
     subtitleColor: 'rgba(255,255,255,0.6)',
-    cardStyle: {
-      background: 'rgba(255,255,255,0.05)',
-      border: '1px solid rgba(255,255,255,0.1)',
-    },
+    cardStyle: { background: 'transparent', border: 'none', boxShadow: 'none' },
     cardTitleStyle: { color: '#fff' },
     headerMark: {
       kind: 'letter',
@@ -66,10 +63,7 @@ export const institutionalBrandingByTenant: Record<DemoTenantId, InstitutionalBr
     pageBackground: 'linear-gradient(180deg, #001f4d 0%, #003380 100%)',
     titleColor: '#fff',
     subtitleColor: 'rgba(255,255,255,0.7)',
-    cardStyle: {
-      background: 'rgba(255,255,255,0.06)',
-      border: '1px solid rgba(255,255,255,0.12)',
-    },
+    cardStyle: { background: 'transparent', border: 'none', boxShadow: 'none' },
     cardTitleStyle: { color: '#fff' },
     headerMark: { kind: 'emoji', emoji: '⭐' },
   },
@@ -84,7 +78,7 @@ export const institutionalBrandingByTenant: Record<DemoTenantId, InstitutionalBr
     pageBackground: 'linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%)',
     titleColor: '#0d47a1',
     subtitleColor: '#546e7a',
-    cardStyle: {},
+    cardStyle: { background: 'transparent', border: 'none', boxShadow: 'none' },
     headerMark: {
       kind: 'letter',
       letter: 'B',

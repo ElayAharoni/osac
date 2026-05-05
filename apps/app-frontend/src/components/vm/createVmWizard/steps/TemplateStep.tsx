@@ -1,6 +1,7 @@
 import {
   Card,
   CardBody,
+  CardHeader,
   CardTitle,
   Content,
   Flex,
@@ -32,7 +33,6 @@ export function TemplateStep({ state, update, search, setSearch, templates }: Te
           value={search}
           onChange={(_e, v) => setSearch(v)}
           onClear={() => setSearch('')}
-          style={{ marginBottom: 'var(--pf-t--global--spacer--md)' }}
         />
       </StackItem>
       <StackItem>
@@ -40,12 +40,22 @@ export function TemplateStep({ state, update, search, setSearch, templates }: Te
           {templates.map((tpl) => (
             <GalleryItem key={tpl.id}>
               <Card
+                id={`create-vm-wizard-tpl-${tpl.id}`}
                 isSelectable
                 isSelected={state.selectedTemplateId === tpl.id}
                 isCompact
-                onClick={() => update('selectedTemplateId', tpl.id)}
-                style={{ cursor: 'pointer' }}
               >
+                <CardHeader
+                  selectableActions={{
+                    variant: 'single',
+                    name: 'create-vm-wizard-template',
+                    selectableActionId: `wizard-tpl-${tpl.id}`,
+                    selectableActionAriaLabel: `Select template ${tpl.title}`,
+                    onChange: (_e, checked) => {
+                      if (checked) update('selectedTemplateId', tpl.id)
+                    },
+                  }}
+                />
                 <CardBody>
                   <CardTitle style={{ marginBottom: 'var(--pf-t--global--spacer--xs)' }}>
                     {tpl.title}
@@ -55,13 +65,13 @@ export function TemplateStep({ state, update, search, setSearch, templates }: Te
                       component="small"
                       style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
                     >
-                      {tpl.description.length > 60 ? '…' : ''}
+                      {tpl.description}
                     </Content>
                   )}
                   <Flex
                     flexWrap={{ default: 'wrap' }}
                     spaceItems={{ default: 'spaceItemsXs' }}
-                    style={{ marginTop: 4 }}
+                    style={{ marginTop: 'var(--pf-t--global--spacer--xs)' }}
                   >
                     {(tpl.tags ?? []).slice(0, 2).map((tag) => (
                       <FlexItem key={tag}>

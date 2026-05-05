@@ -30,14 +30,15 @@ export function TemplateCard({
   const iconEmoji = template.icon === 'rhel' ? '🐧' : template.icon === 'windows' ? '🪟' : '🐧'
 
   return (
-    <Card
-      isClickable={!isSelected}
-      isSelected={isSelected}
-      isFullHeight
-      onClick={onClick}
-      style={{ cursor: 'pointer' }}
-    >
-      <CardHeader>
+    // isClickable + isSelectable allows both the whole-card click action (selectableActions)
+    // and the nested "Create VM" Button to coexist without a PF accessibility warning.
+    <Card isClickable isSelectable isSelected={isSelected} isFullHeight>
+      <CardHeader
+        selectableActions={{
+          onClickAction: onClick,
+          selectableActionAriaLabel: `Select template ${template.title}`,
+        }}
+      >
         <CardTitle>
           <Flex
             alignItems={{ default: 'alignItemsCenter' }}

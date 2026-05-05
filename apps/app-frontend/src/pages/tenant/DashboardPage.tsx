@@ -24,6 +24,7 @@ import {
 import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
 import { PageHeader } from '../../components/layout'
+import { DashboardUtilizationSection, DashboardQuotaSection } from '../../components/dashboard'
 import { useSession } from '../../contexts/SessionContext'
 import { useComputeInstances, useProvisionVm } from '../../api/hooks'
 import type { VmPowerState } from '@osac/api-contracts'
@@ -39,7 +40,7 @@ interface StatCard {
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { selectedTenant } = useSession()
+  const { selectedTenant, isDarkTheme } = useSession()
   const wizardRef = useRef<CreateVmWizardHandle>(null)
   const { data: vms = [] } = useComputeInstances()
   const provisionVm = useProvisionVm()
@@ -170,6 +171,12 @@ export function DashboardPage() {
           </GalleryItem>
         ))}
       </Gallery>
+
+      {/* VM utilization trends + recent activities preview */}
+      <DashboardUtilizationSection isDarkTheme={isDarkTheme} />
+
+      {/* Resource quota donuts */}
+      <DashboardQuotaSection selectedTenant={selectedTenant} />
     </PageSection>
   )
 }

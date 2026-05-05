@@ -64,8 +64,8 @@
 
     "terminology": {
       "type": "object",
-      "description": "Optional glossary of domain terms and display-name clarifications specific to this flow.",
-      "additionalProperties": { "type": "string" }
+      "description": "Optional glossary of domain terms, display-name clarifications, or structured content tables specific to this flow. Values may be strings (simple glossary entries) or structured objects/arrays (e.g. os_families table).",
+      "additionalProperties": true
     },
 
     "entry_bootstrap": {
@@ -192,6 +192,11 @@
               "description": "List of logical component names from FLOW-INDEX reusable_components_across_flows or PF primitives used directly.",
               "minItems": 1,
               "items": { "type": "string", "minLength": 1 }
+            },
+            "notes": {
+              "type": "array",
+              "description": "Optional prose notes for implementers describing design intent, icon usage, or composition patterns not expressible in the components list.",
+              "items": { "type": "string", "minLength": 1 }
             }
           },
           "additionalProperties": false
@@ -265,6 +270,10 @@
           "type": "integer",
           "minimum": 0,
           "description": "Cap on raw opening <div> tags (without pf-primitive-exception) in TSX that implements this step. Enforced by pnpm check:pf-primitives: each file's leading block comment must include flow: <kebab-flow-id> matching docs/specs/ui-flows/<flow>.yaml, and optionally step: <id> or steps: id1, id2; otherwise the checker uses the max budget across all steps in that flow. Non-div raw tags are not covered by this number (they always require pf-primitive-exception). See design-system.yaml layout_and_shell.implementation_policy.automated_check_alignment."
+        },
+        "avoid_custom_css": {
+          "type": "boolean",
+          "description": "When true, implementations must not introduce custom CSS classes for layout or spacing. Use PF layout primitives (Grid/GridItem, Gallery/GalleryItem, Flex/FlexItem, Stack/StackItem, Split/SplitItem) and PF design tokens via inline style props instead. Only exceptions: chart SVG bounding box containers (add pf-primitive-exception comment) and global scrollport rules in global.css."
         }
       },
       "additionalProperties": false
@@ -298,7 +307,27 @@
           },
           "additionalProperties": false
         },
-        "org_card_copy": { "type": "string" }
+        "org_card_copy": { "type": "string" },
+
+        "role_columns": {
+          "type": "object",
+          "description": "Three-column role-picker layout (provider_admin, tenant_admin, tenant_user).",
+          "properties": {
+            "provider_admin": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "icon": { "type": "string" },
+                "copy": { "type": "string" },
+                "primary_action_label": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            "tenant_admin": { "$ref": "#/$defs/RoleColumn" },
+            "tenant_user":  { "$ref": "#/$defs/RoleColumn" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -482,6 +511,28 @@
         "personas": {
           "type": "string",
           "description": "Prose describing which demo personas use this profile."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "RoleColumn": {
+      "type": "object",
+      "description": "Tenant role column on the welcome landing (tenant_admin or tenant_user).",
+      "properties": {
+        "title": { "type": "string" },
+        "icon": { "type": "string" },
+        "copy": { "type": "string" },
+        "tenant_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label"],
+            "properties": {
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

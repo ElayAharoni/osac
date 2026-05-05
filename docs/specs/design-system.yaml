@@ -29,7 +29,11 @@ packages:
       use_for: Data tables (tenant lists, VM lists, users)
   optional:
     - name: '@patternfly/react-charts'
-      use_for: Donut and line charts when charts match PF chart patterns; otherwise use PF6 tokens for custom SVG/D3
+      use_for: >-
+        Donut and line charts. Import chart components from @patternfly/react-charts/victory
+        (Chart, ChartAxis, ChartGroup, ChartLine, ChartDonut). The victory-* packages are peer
+        dependencies of @patternfly/react-charts and are auto-resolved by pnpm (autoInstallPeers: true);
+        do NOT add individual victory-* packages as direct dependencies in package.json.
 
 layout_and_shell:
   description: >-
@@ -46,6 +50,16 @@ layout_and_shell:
   implementation_policy:
     prefer_patternfly_layout_primitives: true
     avoid_raw_div_for_structure: true
+    avoid_custom_css_for_layout: true
+      custom_css_policy: >-
+        Do NOT write custom CSS classes for layout, spacing, or structure. Use PatternFly layout
+        components (Grid/GridItem, Gallery/GalleryItem, Flex/FlexItem, Stack/StackItem, Split/SplitItem)
+        and PF design tokens (var(--pf-t--global--spacer--*), var(--pf-t--global--font--*), etc.) via
+        inline style props instead. Custom CSS is only permitted for: (1) chart SVG bounding box
+        containers (@patternfly/react-charts/victory require explicit pixel height — add a
+        pf-primitive-exception comment), (2) app-level scrollport rules in global.css that PF Page
+        layout requires, and (3) institution-specific logo/brand accent overrides scoped to a data
+        attribute. All other custom CSS classes are a spec violation.
     enforce_with_automated_check: true
     automated_check_command: pnpm check:pf-primitives
     automated_check_alignment: >-
@@ -109,8 +123,24 @@ accessibility:
 charts_topology_custom:
   description: >-
     FLOW-INDEX lists DonutChart, LineChart, NetworkTopology, RecentActivityList — not all are single
-    exported PF components. Implement with PF6 tokens for color and typography; use @patternfly/react-charts
-    where it reduces drift from design system.
+    exported PF components. Implement with PF6 tokens for color and typography.
+  charts_implementation:
+    package: '@patternfly/react-charts'
+    import_path: '@patternfly/react-charts/victory'
+    components:
+      - Chart
+      - ChartAxis
+      - ChartGroup
+      - ChartLine
+      - ChartDonut
+    peer_deps_policy: >-
+      victory-* packages are peer dependencies resolved automatically by pnpm (autoInstallPeers: true).
+      Never install them as direct dependencies. The Vite optimizeDeps entry for victory
+      must use the deep-import syntax '@patternfly/react-charts > victory-core' to let Vite
+      discover transitively without a separate package.json entry.
+    custom_css_exception: >-
+      SVG chart containers require an explicit pixel height; wrap in a <div style={{ height: N }}>
+      with a pf-primitive-exception comment. All other layout uses PF primitives.
 
 flow_component_mapping:
   description: >-

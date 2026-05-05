@@ -38,6 +38,7 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 0
 
     states:
@@ -59,11 +60,24 @@ steps:
         - Wizard
         - WizardHeader
         - WizardFooter
+        - WizardStep
         - Stack
         - Flex
+      notes:
+        - WizardHeader carries a description prop with a brief one-line summary such as
+          "Configure guest OS, boot source, and resources, then review and create."
+        - The PF Wizard renders a step sidebar nav showing step names for orientation;
+          do not replace with a flat progress bar.
+        - WizardFooter shows a custom nextButtonText ("Create virtual machine" on the final step).
+        - isBackDisabled is true on the first step (deployment-details).
+        - All WizardStep children are always rendered; path-specific steps use isHidden
+          so sidebar nav indices stay stable across mode changes (no wizard key reset needed).
+          Fixed step order — deployment-details(1) guest-os(2) boot-source(3) compute(4)
+          template(5) clone-source(6) customization(7) review(8).
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -84,13 +98,32 @@ steps:
       components:
         - WizardStep
         - Card
-        - Form
-        - Stack
-        - Flex
+        - CardHeader
+        - CardTitle
+        - Gallery
+        - GalleryItem
+        - Content
+        - Title
+        - Label
+        - PlusCircleIcon
+        - CatalogIcon
+        - CloneIcon
+      notes:
+        - Three methods rendered as selectable Card tiles in a 3-column Gallery.
+        - Each Card uses CardHeader.selectableActions with variant "single" and
+          name "deployment-method" to implement radio-group semantics.
+        - Each tile has a 44×44 icon badge (same pattern as cvm_wizard_guest_os) followed
+          by CardTitle (with an optional "Recommended" Label badge) and a description
+          Content paragraph in a column layout.
+        - "Icon colors: PlusCircleIcon (blue-400), CatalogIcon (purple-400), CloneIcon (cyan-400)."
+        - The template tile carries a compact blue Label "Recommended" next to the CardTitle.
+        - The deployment step is always shown (isHidden is false); other path steps use
+          isHidden to stay in the sidebar nav without resetting step indices.
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
-      max_raw_div_wrappers: 1
+      avoid_custom_css: true
+      max_raw_div_wrappers: 3
 
     states:
       - editing
@@ -98,8 +131,9 @@ steps:
       - success_method_selected
 
     interactions:
-      - Select one deployment method card radio.
-      - Click Next when method selected.
+      - Click a deployment method card tile (Create new / From template / Clone existing VM).
+      - Default selection is "template"; no Next gate — any selection enables Next.
+      - Click Next to proceed to the first step of the selected path.
 
   - id: cvm_wizard_guest_os
     title: Guest operating system
@@ -109,12 +143,34 @@ steps:
       components:
         - WizardStep
         - Card
+        - CardHeader
+        - CardTitle
+        - Gallery
         - Form
+        - FormGroup
         - FormSelect
-        - Stack
+        - FormSelectOption
+        - Content
+        - Title
+        - RedhatIcon
+        - WindowsIcon
+        - LinuxIcon
+      notes:
+        - OS family is chosen via a 3-column Gallery of selectable Card tiles.
+        - Each Card uses CardHeader.selectableActions with variant "single" and
+          name "guest-os-family" to implement radio-group semantics within the card.
+        - Each Card tile shows an icon badge (44×44 rounded container with
+          brand-colored icon) alongside CardTitle and a brief description Content.
+        - "Three families: RHEL (RedhatIcon), Microsoft Windows (WindowsIcon),
+          Other Linux (LinuxIcon). See terminology.os_families for full content."
+        - Selecting a family resets guestOsType to empty and enables the
+          FormSelect below the card grid.
+        - FormSelect is disabled until a family is selected; placeholder text
+          changes from "Select a guest operating system first" to "Select a type".
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -124,8 +180,10 @@ steps:
       - success_selection_complete
 
     interactions:
-      - Select guest OS family card then OS type from select.
-      - Click Next when both family and type set.
+      - Click an OS family card tile (RHEL / Microsoft Windows / Other Linux) to
+        select family; clears OS type selection.
+      - Select OS version from the FormSelect (enabled only after family chosen).
+      - Click Next only when both family and type are non-empty.
 
   - id: cvm_wizard_boot_source
     title: Boot source
@@ -140,6 +198,7 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -160,11 +219,13 @@ steps:
       components:
         - WizardStep
         - Form
+        - FormGroup
         - TextInput
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -191,6 +252,7 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -214,6 +276,7 @@ steps:
         - SearchInput
         - Dropdown
         - Form
+        - FormGroup
         - TextInput
         - Table
         - Stack
@@ -221,6 +284,7 @@ steps:
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 2
 
     states:
@@ -243,15 +307,18 @@ steps:
       components:
         - WizardStep
         - Form
+        - FormGroup
         - TextInput
         - TextArea
         - Tabs
         - Switch
+        - Checkbox
         - Stack
         - Flex
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 2
 
     states:
@@ -274,12 +341,16 @@ steps:
       components:
         - WizardStep
         - DescriptionList
+        - DescriptionListGroup
+        - DescriptionListTerm
+        - DescriptionListDescription
         - Checkbox
         - Content
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
+      avoid_custom_css: true
       max_raw_div_wrappers: 1
 
     states:
@@ -391,3 +462,34 @@ validation_rules:
     rules:
       - rule: optional_trim
         note: Empty hostname falls back to generated id on provision in buildTenantVmFromModalNewPayload.
+
+terminology:
+  os_families:
+    - key: rhel
+      title: RHEL
+      icon: RedhatIcon
+      description: >-
+        Red Hat Enterprise Linux for production workloads with long-term support.
+      os_types:
+        - Red Hat Enterprise Linux 9.5
+        - Red Hat Enterprise Linux 9.4
+        - Red Hat Enterprise Linux 8.10
+    - key: windows
+      title: Microsoft Windows
+      icon: WindowsIcon
+      description: >-
+        Windows Server or client images for Microsoft-based applications.
+      os_types:
+        - Microsoft Windows Server 2025
+        - Microsoft Windows Server 2022
+        - Microsoft Windows 11
+    - key: other-linux
+      title: Other Linux
+      icon: LinuxIcon
+      description: >-
+        Community and third-party Linux distributions such as Ubuntu or Debian.
+      os_types:
+        - Ubuntu 24.04 LTS
+        - Debian 12
+        - Fedora 41
+        - CentOS Stream 9
