@@ -2,6 +2,7 @@ id: application-shell-session
 title: Application Shell Session Statechart
 source_flow: ../ui-flows/application-shell-session.yaml
 rbac_ref: ../rbac.yaml
+design_system_ref: ../design-system.yaml
 
 context:
   role: null
@@ -59,5 +60,9 @@ ai-hints:
   summary: >-
     Core authenticated shell machine. Nav, masthead actions, and logout controls are role-scoped
     through RBAC permissions.
+  design_system_constraints:
+    - Use PatternFly 6 primitives for shell structure and avoid raw div layout wrappers.
+    - Avoid custom CSS for layout/spacing/structure except documented design-system exceptions.
+    - Keep token-driven light/dark theming semantics (pf-v6-theme-dark toggle; light default baseline).
   impossibleStates:
     - shell_notifications_entry without view_recent_activities permission

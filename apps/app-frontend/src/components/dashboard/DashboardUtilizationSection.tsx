@@ -32,12 +32,7 @@ import {
   StackItem,
   Title,
 } from '@patternfly/react-core'
-import {
-  Chart,
-  ChartAxis,
-  ChartGroup,
-  ChartLine,
-} from '@patternfly/react-charts/victory'
+import { Chart, ChartAxis, ChartGroup, ChartLine } from '@patternfly/react-charts/victory'
 import { buildRecentActivities } from '@osac/api-contracts'
 import { useComputeInstances } from '../../api/hooks'
 
@@ -55,16 +50,20 @@ interface PeriodOption {
 
 const PERIOD_OPTIONS: PeriodOption[] = [
   { value: '24h', label: 'Last 24 hours', points: 24 },
-  { value: '7d',  label: 'Last 7 days',   points: 14 },
-  { value: '30d', label: 'Last 30 days',  points: 30 },
-  { value: '90d', label: 'Last 90 days',  points: 18 },
+  { value: '7d', label: 'Last 7 days', points: 14 },
+  { value: '30d', label: 'Last 30 days', points: 30 },
+  { value: '90d', label: 'Last 90 days', points: 18 },
 ]
 
 // ---------------------------------------------------------------------------
 // Demo data generator — deterministic sine-wave shaped time series
 // ---------------------------------------------------------------------------
 
-interface ChartPoint { x: number; y: number; tickLabel: string }
+interface ChartPoint {
+  x: number
+  y: number
+  tickLabel: string
+}
 
 function buildUtilizationData(
   period: UtilizationPeriod,
@@ -74,10 +73,10 @@ function buildUtilizationData(
   const opt = PERIOD_OPTIONS.find((o) => o.value === period) ?? PERIOD_OPTIONS[1]
   const n = opt.points
   const bases: Record<string, [number, number]> = {
-    cpu:     [55 + (vmCount % 10) * 2, 14],
-    memory:  [68 + (vmCount % 7)  * 3, 11],
-    gpu:     [40 + (vmCount % 8)  * 4, 17],
-    storage: [72 + (vmCount % 5)  * 2,  7],
+    cpu: [55 + (vmCount % 10) * 2, 14],
+    memory: [68 + (vmCount % 7) * 3, 11],
+    gpu: [40 + (vmCount % 8) * 4, 17],
+    storage: [72 + (vmCount % 5) * 2, 7],
   }
   const [base, amp] = bases[metricKey]
   return Array.from({ length: n }, (_, i) => {
@@ -97,10 +96,30 @@ function buildUtilizationData(
 // ---------------------------------------------------------------------------
 
 const METRICS = [
-  { key: 'cpu'     as const, title: 'CPU usage',     subtitle: 'vCPU-weighted utilization across running VMs', color: '#0066CC' },
-  { key: 'memory'  as const, title: 'Memory usage',  subtitle: 'GiB-weighted memory pressure for running VMs',  color: '#F0AB00' },
-  { key: 'gpu'     as const, title: 'GPU usage',     subtitle: 'Accelerator load for GPU-style workloads',       color: '#009596' },
-  { key: 'storage' as const, title: 'Storage usage', subtitle: 'Pool utilization from fleet disk footprint',     color: '#3E8635' },
+  {
+    key: 'cpu' as const,
+    title: 'CPU usage',
+    subtitle: 'vCPU-weighted utilization across running VMs',
+    color: '#0066CC',
+  },
+  {
+    key: 'memory' as const,
+    title: 'Memory usage',
+    subtitle: 'GiB-weighted memory pressure for running VMs',
+    color: '#F0AB00',
+  },
+  {
+    key: 'gpu' as const,
+    title: 'GPU usage',
+    subtitle: 'Accelerator load for GPU-style workloads',
+    color: '#009596',
+  },
+  {
+    key: 'storage' as const,
+    title: 'Storage usage',
+    subtitle: 'Pool utilization from fleet disk footprint',
+    color: '#3E8635',
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -215,10 +234,7 @@ export function DashboardUtilizationSection(_props: DashboardUtilizationSectionP
                         role="img"
                         aria-label={`${m.title} — ${currentPeriod.label}, percent over time`}
                       >
-                        <Chart
-                          height={180}
-                          padding={{ top: 8, right: 8, bottom: 36, left: 44 }}
-                        >
+                        <Chart height={180} padding={{ top: 8, right: 8, bottom: 36, left: 44 }}>
                           <ChartAxis
                             tickValues={tickPositions}
                             tickFormat={(x: number) => data[x]?.tickLabel ?? ''}
@@ -249,12 +265,7 @@ export function DashboardUtilizationSection(_props: DashboardUtilizationSectionP
 
         {/* ---- Right: Recent activities sidebar ---- */}
         <GridItem sm={12} md={4} lg={3}>
-          <Card
-            isFullHeight
-            isClickable
-            component="aside"
-            aria-label="Recent activities"
-          >
+          <Card isFullHeight isClickable component="aside" aria-label="Recent activities">
             <CardHeader
               selectableActions={{
                 onClickAction: () => navigate('/activities'),
@@ -270,10 +281,13 @@ export function DashboardUtilizationSection(_props: DashboardUtilizationSectionP
               <Stack hasGutter>
                 {activities.map((item) => {
                   const labelColor =
-                    item.severity === 'success' ? 'green'
-                    : item.severity === 'danger'  ? 'red'
-                    : item.severity === 'warning' ? 'orange'
-                    : 'blue'
+                    item.severity === 'success'
+                      ? 'green'
+                      : item.severity === 'danger'
+                        ? 'red'
+                        : item.severity === 'warning'
+                          ? 'orange'
+                          : 'blue'
                   return (
                     <StackItem key={item.id}>
                       <Stack hasGutter={false}>

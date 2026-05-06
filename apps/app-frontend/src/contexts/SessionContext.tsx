@@ -82,7 +82,7 @@ export function SessionProvider({
   const roleRef = useRef<DemoShellRole>(role)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoginLoading, setIsLoginLoading] = useState(false)
-  const [isDarkTheme, setIsDarkTheme] = useState(true)
+  const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [topologyDetailRequest, setTopologyDetailRequest] =
     useState<TopologyVmDetailRequest | null>(null)
 
@@ -109,16 +109,6 @@ export function SessionProvider({
     root.classList.toggle('pf-v6-theme-dark', isDarkTheme)
     root.dataset.osacTheme = isDarkTheme ? 'dark' : 'light'
   }, [isDarkTheme])
-
-  // Auto theme per tenant (before login)
-  useLayoutEffect(() => {
-    if (isLoggedIn) return
-    if (selectedTenant === 'northstar' || selectedTenant === 'vertexa') {
-      setIsDarkTheme(true)
-    } else if (selectedTenant === 'evergreen') {
-      setIsDarkTheme(false)
-    }
-  }, [isLoggedIn, selectedTenant])
 
   const loginEmail = selectedTenant ? demoLoginEmailForRole(selectedTenant, role) : ''
 

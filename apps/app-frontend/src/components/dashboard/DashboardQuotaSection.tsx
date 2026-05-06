@@ -38,15 +38,8 @@ export function DashboardQuotaSection({ selectedTenant }: DashboardQuotaSectionP
   if (!quota.length) return null
 
   return (
-    <section
-      aria-label="Resource quota"
-      style={{ marginTop: 'var(--pf-t--global--spacer--xl)' }}
-    >
-      <Title
-        headingLevel="h2"
-        size="xl"
-        style={{ margin: '0 0 var(--pf-t--global--spacer--md)' }}
-      >
+    <section aria-label="Resource quota" style={{ marginTop: 'var(--pf-t--global--spacer--xl)' }}>
+      <Title headingLevel="h2" size="xl" style={{ margin: '0 0 var(--pf-t--global--spacer--md)' }}>
         Resource quota
       </Title>
 
@@ -54,10 +47,7 @@ export function DashboardQuotaSection({ selectedTenant }: DashboardQuotaSectionP
         {quota.map((entry) => {
           const pct = entry.limit > 0 ? Math.round((entry.used / entry.limit) * 100) : 0
           const available = Math.max(0, entry.limit - entry.used)
-          const usedColor =
-            pct >= 90 ? '#C9190B'
-            : pct >= 75 ? '#F0AB00'
-            : '#0066CC'
+          const usedColor = pct >= 90 ? '#C9190B' : pct >= 75 ? '#F0AB00' : '#0066CC'
 
           return (
             <GalleryItem key={entry.resource}>
@@ -77,14 +67,17 @@ export function DashboardQuotaSection({ selectedTenant }: DashboardQuotaSectionP
                         ariaDesc={`${entry.resource} quota utilization`}
                         ariaTitle={`${entry.resource}: ${pct}% used`}
                         data={[
-                          { x: 'Used',      y: entry.used },
-                          { x: 'Available', y: available  },
+                          { x: 'Used', y: entry.used },
+                          { x: 'Available', y: available },
                         ]}
                         height={160}
                         width={160}
                         title={`${pct}%`}
                         subTitle={entry.unit}
-                        colorScale={[usedColor, 'var(--pf-t--global--background--color--secondary--default)']}
+                        colorScale={[
+                          usedColor,
+                          'var(--pf-t--global--background--color--secondary--default)',
+                        ]}
                         padding={8}
                       />
                     </FlexItem>

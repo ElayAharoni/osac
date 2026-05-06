@@ -1,90 +1,111 @@
 import {
-  Button,
   Card,
   CardBody,
-  CardFooter,
   CardHeader,
   CardTitle,
   Content,
+  Divider,
   Flex,
   FlexItem,
-  Label,
+  Stack,
+  StackItem,
 } from '@patternfly/react-core'
+import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
+import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
 import type { ClusterTemplate } from '@osac/api-contracts'
+import linuxMascotUrl from '../../assets/guest-os-tux-linux.png'
 
 interface TemplateCardProps {
   template: ClusterTemplate
-  isSelected: boolean
-  isProvisionBlocked: boolean
-  onClick: () => void
-  onCreateFromTemplate: () => void
 }
 
-export function TemplateCard({
-  template,
-  isSelected,
-  isProvisionBlocked,
-  onClick,
-  onCreateFromTemplate,
-}: TemplateCardProps) {
-  const iconEmoji = template.icon === 'rhel' ? '🐧' : template.icon === 'windows' ? '🪟' : '🐧'
+function subtitleForTemplate(template: ClusterTemplate): string {
+  if (template.description && template.description.trim().length > 0) {
+    return template.description
+  }
+  return template.metadata.name
+}
+
+function workloadLabel(template: ClusterTemplate): string {
+  if (!template.workloadProfile) return template.workload ?? 'General'
+  if (template.workloadProfile === 'high-performance') return 'High performance'
+  if (template.workloadProfile === 'machine-learning') return 'Machine learning'
+  if (template.workloadProfile === 'data-processing') return 'Data processing'
+  return 'Analytics'
+}
+
+function OsIcon({ icon }: { icon?: string }) {
+  const style = { width: 28, height: 28 } as const
+  if (icon === 'windows') return <WindowsIcon style={{ ...style, color: '#0078D4' }} />
+  if (icon === 'rhel') return <RedhatIcon style={{ ...style, color: '#EE0000' }} />
+  return (
+    <img
+      src={linuxMascotUrl}
+      alt=""
+      width={28}
+      height={28}
+      style={{ display: 'block', objectFit: 'contain' }}
+    />
+  )
+}
+
+export function TemplateCard({ template }: TemplateCardProps) {
+  const cpu = `${template.defaultCores ?? 2} vCPU`
+  const memory = `${template.defaultMemoryGib ?? 8} GiB`
+  const storage = 'Boot volume'
+  const workload = workloadLabel(template)
+  const subtitle = subtitleForTemplate(template)
 
   return (
-    // isClickable + isSelectable allows both the whole-card click action (selectableActions)
-    // and the nested "Create VM" Button to coexist without a PF accessibility warning.
-    <Card isClickable isSelectable isSelected={isSelected} isFullHeight>
-      <CardHeader
-        selectableActions={{
-          onClickAction: onClick,
-          selectableActionAriaLabel: `Select template ${template.title}`,
-        }}
-      >
-        <CardTitle>
+    <Card isClickable isFullHeight className="tenant-vm-template-card">
+      <CardHeader className="tenant-vm-template-card__header">
+        <CardTitle className="tenant-vm-template-card__title-block">
           <Flex
-            alignItems={{ default: 'alignItemsCenter' }}
+            alignItems={{ default: 'alignItemsFlexStart' }}
             spaceItems={{ default: 'spaceItemsXs' }}
           >
-            <FlexItem>{iconEmoji}</FlexItem>
-            <FlexItem>{template.title}</FlexItem>
+            <FlexItem className="tenant-vm-template-card__icon-tile">
+              <OsIcon icon={template.icon} />
+            </FlexItem>
+            <FlexItem>
+              <Stack hasGutter>
+                <StackItem>
+                  <Content component="h3" className="tenant-vm-template-card__title">
+                    {template.title}
+                  </Content>
+                </StackItem>
+                <StackItem>
+                  <Content component="small" className="tenant-vm-template-card__subtitle">
+                    {subtitle}
+                  </Content>
+                </StackItem>
+              </Stack>
+            </FlexItem>
           </Flex>
         </CardTitle>
       </CardHeader>
-      <CardBody>
-        <Content
-          component="p"
-          style={{
-            color: 'var(--pf-t--global--text--color--subtle)',
-            fontSize: 'var(--pf-t--global--font--size--body--sm)',
-          }}
-        >
-          {(template.description ?? '').slice(0, 100)}
-          {(template.description?.length ?? 0) > 100 ? '…' : ''}
-        </Content>
-        <Flex
-          flexWrap={{ default: 'wrap' }}
-          spaceItems={{ default: 'spaceItemsXs' }}
-          style={{ marginTop: 'var(--pf-t--global--spacer--sm)' }}
-        >
-          {(template.tags ?? []).slice(0, 3).map((tag) => (
-            <Label key={tag} isCompact color="blue" variant="outline">
-              {tag}
-            </Label>
-          ))}
-        </Flex>
+      <CardBody className="tenant-vm-template-card__body">
+        <Stack hasGutter>
+          <StackItem>
+            <Flex
+              className="tenant-vm-template-card__resource-row"
+              justifyContent={{ default: 'justifyContentSpaceBetween' }}
+            >
+              <FlexItem>{cpu}</FlexItem>
+              <FlexItem>{memory}</FlexItem>
+              <FlexItem>{storage}</FlexItem>
+            </Flex>
+          </StackItem>
+          <StackItem>
+            <Divider />
+          </StackItem>
+          <StackItem>
+            <Content component="small" className="tenant-vm-template-card__workload-line">
+              Workload: {workload}
+            </Content>
+          </StackItem>
+        </Stack>
       </CardBody>
-      <CardFooter>
-        <Button
-          variant="secondary"
-          size="sm"
-          isDisabled={isProvisionBlocked}
-          onClick={(e) => {
-            e.stopPropagation()
-            onCreateFromTemplate()
-          }}
-        >
-          Create VM
-        </Button>
-      </CardFooter>
     </Card>
   )
 }
