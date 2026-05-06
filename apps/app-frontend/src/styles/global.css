@@ -127,14 +127,54 @@ body {
 
 /* VM stat card hover feedback */
 .osac-dashboard-vm-stat-card {
-  transition: box-shadow 0.15s;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--medium);
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.osac-dashboard-vm-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(3, 3, 3, 0.14);
+  border-color: color-mix(in srgb, var(--pf-t--global--active-color--100) 40%, var(--pf-t--global--border--color--default));
+}
+
+.osac-dashboard-vm-stat-card:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pf-t--global--active-color--100) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .osac-dashboard-vm-stat-card {
+    transition: box-shadow 0.16s ease, border-color 0.16s ease;
+  }
+
+  .osac-dashboard-vm-stat-card:hover {
+    transform: none;
+  }
 }
 
 /* VM card grid */
 .osac-vm-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: var(--pf-t--global--spacer--md);
+}
+
+/* My VMs view switcher: compact icon-only toggle. */
+.osac-view-toggle--compact .pf-v6-c-toggle-group__item {
+  min-width: 2rem;
+}
+
+.osac-view-toggle--compact .pf-v6-c-toggle-group__button {
+  padding: 0.2rem 0.45rem;
+}
+
+.osac-view-toggle--compact .pf-v6-c-toggle-group__button svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 /* Console demo full screen */
@@ -365,6 +405,29 @@ body {
   margin-top: var(--pf-t--global--spacer--md);
 }
 
+.osac-vm-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: var(--pf-t--global--spacer--md);
+  align-items: stretch;
+}
+
+.osac-vm-detail-main-card,
+.osac-vm-detail-console-card {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  height: 100%;
+}
+
+.osac-vm-detail-console-card .pf-v6-c-card__body {
+  height: 100%;
+}
+
+@media (max-width: 992px) {
+  .osac-vm-detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Activity feed */
 .osac-activity-list {
   display: flex;
@@ -385,4 +448,91 @@ body {
   height: 100%;
   border-radius: 4px;
   transition: width 0.3s ease;
+}
+
+/* Create VM wizard: wider modal + no inner scroll on deployment (three cards). */
+.create-vm-wizard--deployment-step .pf-v6-c-wizard__main {
+  overflow-y: visible !important;
+  overflow-x: visible !important;
+}
+
+.create-vm-wizard .pf-v6-c-wizard__footer {
+  justify-content: flex-start;
+}
+
+/* Deployment step: equal-height cards (grid + full-height card; PF Flex row often won’t stretch). */
+.osac-deploy-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+@media (min-width: 768px) {
+  .osac-deploy-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--pf-t--global--spacer--2xl);
+    align-items: stretch;
+  }
+}
+
+.osac-deploy-options__cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.osac-deploy-options__card {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100%;
+  display: flex !important;
+  flex-direction: column;
+}
+
+.osac-deploy-options__card .pf-v6-c-card__body {
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.osac-deploy-options__badge-slot {
+  min-height: 1.625rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Create VM wizard — template step: responsive card grid */
+.osac-template-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+  max-height: min(360px, 42vh);
+  overflow-y: auto;
+}
+
+.osac-template-cards__card {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Create VM wizard — clone source step: fixed two-column equal-height cards */
+.osac-clone-source-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+  max-height: min(360px, 42vh);
+  overflow-y: auto;
+}
+
+.osac-clone-source-cards > div {
+  display: flex;
+}
+
+.osac-clone-source-cards__card {
+  width: 100%;
+  height: 100%;
 }

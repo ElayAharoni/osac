@@ -1,222 +1,179 @@
-/**
- * flow: create-virtual-machine-wizard
- * step: cvm_wizard_guest_os
- *
- * OS family selection via 3-column Gallery of selectable Card tiles.
- * Each tile shows an icon badge, title, and description.
- * FormSelect below the grid is enabled only after a family is chosen.
- */
 import {
   Card,
+  CardBody,
   CardHeader,
-  CardTitle,
   Content,
   Flex,
   FlexItem,
-  Form,
   FormGroup,
   FormSelect,
   FormSelectOption,
-  Gallery,
-  GalleryItem,
+  Radio,
   Stack,
   StackItem,
   Title,
 } from '@patternfly/react-core'
-import { LinuxIcon } from '@patternfly/react-icons/dist/esm/icons/linux-icon'
 import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
+import guestOsTuxLinuxUrl from '../../../../assets/guest-os-tux-linux.png'
+import { GUEST_OS_FAMILIES, OS_TYPES } from '../constants'
 import type { UpdateFn, WizardState } from '../types'
 
-// ---------------------------------------------------------------------------
-// OS family data — matches terminology.os_families in the spec
-// ---------------------------------------------------------------------------
+const FAMILY_ICONS = {
+  rhel: RedhatIcon,
+  windows: WindowsIcon,
+} as const
 
-const ICON_BADGE_BG = 'var(--pf-t--global--background--color--secondary--default)'
-
-type OsFamilyKey = 'rhel' | 'windows' | 'other-linux'
-
-interface OsFamilyCard {
-  key: OsFamilyKey
-  inputId: string
-  cardId: string
-  title: string
-  description: string
-  ariaLabel: string
-  iconColor: string
+const FAMILY_ICON_COLORS: Record<keyof typeof FAMILY_ICONS, string> = {
+  rhel: '#EE0000',
+  windows: '#0078D4',
 }
 
-const OS_FAMILY_CARDS: OsFamilyCard[] = [
-  {
-    key: 'rhel',
-    cardId: 'guest-os-rhel-card',
-    inputId: 'guest-os-rhel',
-    title: 'RHEL',
-    description: 'Red Hat Enterprise Linux for production workloads with long-term support.',
-    ariaLabel: 'Select Red Hat Enterprise Linux',
-    iconColor: '#EE0000',
-  },
-  {
-    key: 'windows',
-    cardId: 'guest-os-windows-card',
-    inputId: 'guest-os-windows',
-    title: 'Microsoft Windows',
-    description: 'Windows Server or client images for Microsoft-based applications.',
-    ariaLabel: 'Select Microsoft Windows',
-    iconColor: '#00A4EF',
-  },
-  {
-    key: 'other-linux',
-    cardId: 'guest-os-other-linux-card',
-    inputId: 'guest-os-other-linux',
-    title: 'Other Linux',
-    description: 'Community and third-party Linux distributions such as Ubuntu or Debian.',
-    ariaLabel: 'Select other Linux distribution',
-    iconColor: '#FFD132',
-  },
-]
-
-const OS_TYPES: Record<OsFamilyKey, { value: string; label: string }[]> = {
-  rhel: [
-    { value: 'rhel-9-5',  label: 'Red Hat Enterprise Linux 9.5' },
-    { value: 'rhel-9-4',  label: 'Red Hat Enterprise Linux 9.4' },
-    { value: 'rhel-8-10', label: 'Red Hat Enterprise Linux 8.10' },
-  ],
-  windows: [
-    { value: 'win-srv-2025', label: 'Microsoft Windows Server 2025' },
-    { value: 'win-srv-2022', label: 'Microsoft Windows Server 2022' },
-    { value: 'win-11',       label: 'Microsoft Windows 11' },
-  ],
-  'other-linux': [
-    { value: 'ubuntu-2404',      label: 'Ubuntu 24.04 LTS' },
-    { value: 'debian-12',        label: 'Debian 12' },
-    { value: 'fedora-41',        label: 'Fedora 41' },
-    { value: 'centos-stream-9',  label: 'CentOS Stream 9' },
-  ],
-}
-
-function OsFamilyIcon({ familyKey, color }: { familyKey: OsFamilyKey; color: string }) {
-  const iconStyle = { width: 24, height: 24, flexShrink: 0 as const, color }
-  if (familyKey === 'rhel')        return <RedhatIcon aria-hidden style={iconStyle} />
-  if (familyKey === 'windows')     return <WindowsIcon aria-hidden style={iconStyle} />
-  return <LinuxIcon aria-hidden style={{ ...iconStyle, width: 28, height: 28 }} />
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const VERSION_PLACEHOLDER = 'Select a version…'
+const NEED_OS_PLACEHOLDER = 'You need to choose an OS first.'
 
 export function GuestOsStep({ state, update }: { state: WizardState; update: UpdateFn }) {
-  const selectedFamily = (state.osFamilyNew as OsFamilyKey | '') || null
+  const familySelected = !!state.osFamilyNew
+  const versions = familySelected ? (OS_TYPES[state.osFamilyNew] ?? []) : []
 
   return (
     <Stack hasGutter>
       <StackItem>
-        <Title headingLevel="h3">Guest operating system</Title>
+        <Title id="guest-os-heading" headingLevel="h2" size="xl">
+          Guest operating system
+        </Title>
         <Content
           component="p"
-          style={{
-            marginTop: 'var(--pf-t--global--spacer--xs)',
-            color: 'var(--pf-t--global--text--color--subtle)',
-          }}
+          className="pf-v6-u-color-text-subtle"
+          style={{ marginTop: 'var(--pf-t--global--spacer--sm)', maxWidth: 720 }}
         >
-          Select the guest operating system to be installed on your virtual machine.
+          Choose a platform, then pick a specific version from the list below.
         </Content>
       </StackItem>
-
       <StackItem>
-        <Gallery hasGutter minWidths={{ default: '200px' }}>
-          {OS_FAMILY_CARDS.map((os) => (
-            <GalleryItem key={os.key}>
-              <Card
-                id={os.cardId}
-                isFullHeight
-                isSelectable
-                isSelected={selectedFamily === os.key}
-              >
-                <CardHeader
-                  selectableActions={{
-                    variant: 'single',
-                    name: 'guest-os-family',
-                    selectableActionId: os.inputId,
-                    selectableActionAriaLabel: os.ariaLabel,
-                    onChange: (_e, checked) => {
-                      if (checked) {
-                        update('osFamilyNew', os.key)
-                        update('osTypeNew', '')
-                      }
-                    },
+        <div className="osac-deploy-options" role="radiogroup" aria-labelledby="guest-os-heading">
+          {GUEST_OS_FAMILIES.map((opt) => {
+            const selected = state.osFamilyNew === opt.id
+            const PfIcon = opt.id === 'linux' ? null : FAMILY_ICONS[opt.id]
+            return (
+              <div key={opt.id} className="osac-deploy-options__cell">
+                <Card
+                  id={`guest-os-card-${opt.id}`}
+                  className="osac-deploy-options__card"
+                  isCompact
+                  isFullHeight
+                  isClickable
+                  isSelected={selected}
+                  onClick={() => {
+                    update('osFamilyNew', opt.id)
+                    update('osTypeNew', '')
+                  }}
+                  ouiaId={`guest-os-option-${opt.id}`}
+                  style={{
+                    cursor: 'pointer',
+                    boxSizing: 'border-box',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: selected
+                      ? 'var(--pf-t--global--color--brand--default)'
+                      : 'var(--pf-t--global--border--color--default)',
+                    borderRadius: 'var(--pf-t--global--border--radius--medium)',
                   }}
                 >
-                  <Flex alignItems={{ default: 'alignItemsFlexStart' }} spaceItems={{ default: 'spaceItemsMd' }}>
-                    <FlexItem>
-                      {/* pf-primitive-exception: icon badge sizing requires a flex container with
-                          fixed dimensions; no PF primitive expresses a 44x44 icon tile */}
-                      <div
-                        style={{
-                          flexShrink: 0,
-                          width: 44,
-                          height: 44,
-                          borderRadius: 'var(--pf-t--global--border--radius--medium)',
-                          backgroundColor: ICON_BADGE_BG,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <OsFamilyIcon familyKey={os.key} color={os.iconColor} />
-                      </div>
-                    </FlexItem>
-                    <FlexItem grow={{ default: 'grow' }} style={{ minWidth: 0 }}>
-                      <CardTitle
-                        style={{
-                          fontSize: 'var(--pf-t--global--font--size--body--lg)',
-                          marginBottom: 'var(--pf-t--global--spacer--xs)',
-                        }}
-                      >
-                        {os.title}
-                      </CardTitle>
-                      <Content
-                        component="p"
-                        style={{
-                          margin: 0,
-                          color: 'var(--pf-t--global--text--color--subtle)',
-                          fontSize: 'var(--pf-t--global--font--size--body--sm)',
-                        }}
-                      >
-                        {os.description}
-                      </Content>
-                    </FlexItem>
-                  </Flex>
-                </CardHeader>
-              </Card>
-            </GalleryItem>
-          ))}
-        </Gallery>
+                  <CardHeader style={{ flexShrink: 0 }}>
+                    <Flex
+                      justifyContent={{ default: 'justifyContentSpaceBetween' }}
+                      alignItems={{ default: 'alignItemsFlexStart' }}
+                      style={{ width: '100%' }}
+                    >
+                      <FlexItem>
+                        {PfIcon ? (
+                          <PfIcon
+                            style={{
+                              color: FAMILY_ICON_COLORS[opt.id as keyof typeof FAMILY_ICON_COLORS],
+                              width: 28,
+                              height: 28,
+                            }}
+                          />
+                        ) : (
+                          <img
+                            src={guestOsTuxLinuxUrl}
+                            alt=""
+                            width={28}
+                            height={28}
+                            style={{
+                              display: 'block',
+                              objectFit: 'contain',
+                              borderRadius: 'var(--pf-t--global--border--radius--small)',
+                            }}
+                          />
+                        )}
+                      </FlexItem>
+                      <FlexItem>
+                        <Radio
+                          id={`guest-os-radio-${opt.id}`}
+                          name="guestOsFamily"
+                          aria-label={opt.title}
+                          isChecked={selected}
+                          onChange={() => {
+                            update('osFamilyNew', opt.id)
+                            update('osTypeNew', '')
+                          }}
+                        />
+                      </FlexItem>
+                    </Flex>
+                  </CardHeader>
+                  <CardBody>
+                    <Stack hasGutter style={{ flex: 1 }}>
+                      <StackItem>
+                        <Content
+                          component="h3"
+                          style={{ fontWeight: 600, margin: 0, fontSize: '1rem' }}
+                        >
+                          {opt.title}
+                        </Content>
+                      </StackItem>
+                      <StackItem>
+                        <div className="osac-deploy-options__badge-slot" aria-hidden />
+                      </StackItem>
+                      <StackItem>
+                        <Content
+                          component="p"
+                          className="pf-v6-u-color-text-subtle"
+                          style={{
+                            margin: 0,
+                            fontSize: 'var(--pf-t--global--font--size--body--sm)',
+                          }}
+                        >
+                          {opt.description}
+                        </Content>
+                      </StackItem>
+                    </Stack>
+                  </CardBody>
+                </Card>
+              </div>
+            )
+          })}
+        </div>
       </StackItem>
-
       <StackItem>
-        <Form>
-          <FormGroup label="Guest operating system type" fieldId="guest-os-type" isRequired>
-            <FormSelect
-              id="guest-os-type"
-              value={state.osTypeNew}
-              isDisabled={!selectedFamily}
-              onChange={(_e, v) => update('osTypeNew', v)}
-              aria-label="Guest operating system type"
-            >
-              <FormSelectOption
-                value=""
-                label={!selectedFamily ? 'Select a guest operating system first' : 'Select a type'}
-                isPlaceholder
-              />
-              {selectedFamily &&
-                OS_TYPES[selectedFamily].map((opt) => (
-                  <FormSelectOption key={opt.value} value={opt.value} label={opt.label} />
-                ))}
-            </FormSelect>
-          </FormGroup>
-        </Form>
+        <FormGroup label="Operating system version" fieldId="guest-os-version" isRequired>
+          <FormSelect
+            id="guest-os-version"
+            value={familySelected ? state.osTypeNew : ''}
+            isDisabled={!familySelected}
+            onChange={(_e, value: string) => update('osTypeNew', value)}
+          >
+            <FormSelectOption
+              value=""
+              label={familySelected ? VERSION_PLACEHOLDER : NEED_OS_PLACEHOLDER}
+              isPlaceholder
+            />
+            {versions.map((t) => (
+              <FormSelectOption key={t} value={t} label={t} />
+            ))}
+          </FormSelect>
+        </FormGroup>
       </StackItem>
     </Stack>
   )

@@ -13,7 +13,7 @@ export function PageHeader({ title, description, descriptionMaxWidth, actions }:
     <Flex
       className="osac-page-toolbar-sticky"
       justifyContent={actions ? { default: 'justifyContentSpaceBetween' } : undefined}
-      alignItems={actions ? { default: 'alignItemsCenter' } : undefined}
+      alignItems={actions ? { default: 'alignItemsFlexStart' } : undefined}
     >
       <FlexItem className="osac-page-toolbar-sticky__lead">
         <Title headingLevel="h1" size="2xl" style={{ margin: 0 }}>

@@ -2,6 +2,7 @@
  * flow: vm-template-catalog
  * steps: vmc_catalog_grid, vmc_catalog_provider_global
  */
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -28,7 +29,7 @@ import {
 } from '@patternfly/react-core'
 import type { ClusterTemplate } from '@osac/api-contracts'
 import { useSession } from '../../contexts/SessionContext'
-import { useClusterTemplates, useComputeInstances, useProvisionVm } from '../../api/hooks'
+import { useClusterTemplates, useComputeInstances } from '../../api/hooks'
 import { PageHeader } from '../../components/layout'
 import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export function CatalogPage({ isProviderGlobal = false }: Props) {
+  const queryClient = useQueryClient()
   const { selectedTenant } = useSession()
   const [search, setSearch] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<ClusterTemplate | null>(null)
@@ -46,7 +48,6 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
 
   const { data: templates = [] } = useClusterTemplates()
   const { data: vms = [] } = useComputeInstances()
-  const provisionVm = useProvisionVm()
 
   const isProvisionBlocked = isProviderGlobal && selectedTenant === 'vertexa'
   const tenant = selectedTenant && selectedTenant !== 'vertexa' ? selectedTenant : 'northstar'
@@ -77,7 +78,9 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
         ref={wizardRef}
         existingVms={vms}
         tenant={tenant}
-        onProvision={(vm) => provisionVm.mutate(vm)}
+        onProvision={(_vm) => {
+          void queryClient.invalidateQueries({ queryKey: ['compute_instances'] })
+        }}
         defaultMode="template"
       />
 

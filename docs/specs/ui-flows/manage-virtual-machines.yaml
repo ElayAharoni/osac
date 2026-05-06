@@ -20,23 +20,23 @@ steps:
   - id: mvm_list_view
     title: My VMs list
     goal: >-
-      View search filter and sort VM cards or table; open create VM from header (same control as
-      dashboard); open detail; trigger power actions or clone.
+      View and filter VM instances, switch between grid cards and compact table, open create VM from
+      the header, open detail, and trigger VM lifecycle actions or clone.
 
     ui:
       components:
         - PageSection
         - PageHeader
         - CreateVmWizard
-        - Stack
         - Flex
-        - Split
-        - Title
+        - FormSelect
+        - Divider
         - SearchInput
         - ToggleGroup
         - Gallery
+        - Card
+        - VmStatusLabel
         - Table
-        - Dropdown
         - Button
         - Label
     ui_policy:
@@ -52,34 +52,37 @@ steps:
       - success_populated
       - filtered_empty
       - power_filter_applied_from_dashboard
-      - created_filter_applied_after_provision
       - list_view_mode_cards
       - list_view_mode_table
 
     interactions:
-      - Click Create virtual machine in the page header to open the create VM wizard (tenant user; same label and placement as dashboard).
-      - Toggle list versus card layout.
-      - Search by VM name substring.
-      - Open row or card actions menu for start stop restart clone.
-      - Select VM to open detail drawer or full detail view.
+      - Read header description: “View and filter instances. Use the layout toggle for grid cards (same style as templates) or a compact table.”
+      - Click Create virtual machine in the header-right area to open the create VM wizard (tenant user only).
+      - Use the separator-bounded filter row to search by VM name, filter by status (all/running/stopped/paused), and filter by OS.
+      - Toggle card versus table layout from the right side of the filter row with compact icon-only controls.
+      - Review card layout with fixed minimum width and visible border; header places larger OS icon top-left and Console outline label + VmStatusLabel + actions menu top-right.
+      - Review card body order: VM name below icon row, description, CPU/Memory/Storage key-above-value row, divider, then inline keyed rows for IP address and created date.
+      - Open row or card actions menu with start stop restart clone migrate delete; enablement is state-aware (for example start only when stopped, stop/restart when running or paused).
+      - Select VM row or card to replace the list with full-detail layout.
       - Re-select My VMs nav to return from detail to list.
 
   - id: mvm_detail_drawer
-    title: Virtual machine detail
-    goal: Inspect overview networking storage conditions console snapshot and launch console demo when running.
+    title: Virtual machine detail layout
+    goal: Inspect VM properties in full-page detail tabs, use a dedicated console side card, and return to list from breadcrumb.
 
     ui:
       components:
-        - Drawer
+        - PageSection
+        - Breadcrumb
         - Stack
         - Flex
-        - Breadcrumb
-        - Tabs
         - Card
+        - Tabs
+        - Title
+        - Divider
         - DescriptionList
-        - Alert
+        - VmStatusLabel
         - Button
-        - VmGuestDesktopSnapshot
     ui_policy:
       prefer_patternfly_primitives: true
       minimize_raw_div_wrappers: true
@@ -99,11 +102,12 @@ steps:
       - console_launch_enabled
 
     interactions:
+      - Read breadcrumb in upper-left: My VMs -> selected VM name.
+      - Click My VMs breadcrumb item to return to the list view.
+      - Review two-card detail layout: large primary card for tabbed VM properties and smaller right-side console card.
       - Navigate tabs within detail.
-      - Trigger start stop restart with simulated pending then settled state.
-      - Stop from UI updates console stop reason override until next start.
-      - Click Launch console when running to open vcd_console_demo in new query param route or window behavior per implementation.
-      - Close detail or breadcrumb back to list.
+      - Use the console card to view status and launch console; use top-right actions menu (start stop restart clone migrate delete) with state-aware disabled items.
+      - Read VM properties in Overview and Networking tabs and condition diagnostics in Conditions tab.
 
   - id: mvm_topology_handoff
     title: Open VM detail from network topology

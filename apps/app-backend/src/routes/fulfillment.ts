@@ -17,20 +17,14 @@
  *   GET  /api/fulfillment/v1/security_groups         → mock SG list
  */
 import type { FastifyInstance } from 'fastify'
-import { VM_TEMPLATES, buildVmsForTenant, DEMO_ORGANIZATIONS } from '@osac/api-contracts'
+import { VM_TEMPLATES, DEMO_ORGANIZATIONS } from '@osac/api-contracts'
 import type { ComputeInstance } from '@osac/api-contracts'
+import { vmStore } from '../mock-vm-store.js'
 
 interface RouteConfig {
   apiMode: string
   fulfillmentApiUrl?: string
 }
-
-const allMockVms: ComputeInstance[] = [
-  ...buildVmsForTenant('northstar'),
-  ...buildVmsForTenant('evergreen'),
-]
-
-const vmStore = new Map<string, ComputeInstance>(allMockVms.map((vm) => [vm.id, vm]))
 
 export async function registerFulfillmentRoutes(app: FastifyInstance, config: RouteConfig) {
   const { apiMode, fulfillmentApiUrl } = config

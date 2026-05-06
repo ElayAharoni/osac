@@ -72,13 +72,25 @@ export interface ClusterTemplateSummary {
   description?: string
 }
 
+export type TemplateWorkloadProfile =
+  | 'high-performance'
+  | 'analytics'
+  | 'machine-learning'
+  | 'data-processing'
+
 export interface ClusterTemplate extends ClusterTemplateSummary {
   metadata: Metadata
   spec?: Record<string, unknown>
   status?: Record<string, unknown>
   /** UI extras */
   workload?: string
+  /** Wizard: filter chip and card footer label (maps to display string in app). */
+  workloadProfile?: TemplateWorkloadProfile
+  /** Demo defaults for card summary and BFF template finalize spec.cores / memoryGib. */
+  defaultCores?: number
+  defaultMemoryGib?: number
   tags?: string[]
+  /** OS family for icon + filter: rhel | windows | linux */
   icon?: string
 }
 

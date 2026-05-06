@@ -1,31 +1,35 @@
 /**
  * flow: create-virtual-machine-wizard
- * steps: cvm_modal_closed → cvm_modal_open → cvm_wizard_* → cvm_wizard_review_create
+ * steps: cvm_modal_open, cvm_wizard_*, cvm_wizard_review_create
  *
- * Three provision paths (always-visible WizardStep list; path steps use isHidden):
- *   deployment-details (1)
- *   guest-os      (2)  — new only
- *   boot-source   (3)  — new only
- *   compute       (4)  — new only
- *   template      (5)  — template only
- *   clone-source  (6)  — clone only
- *   customization (7)  — new + template
- *   review        (8)  — always
- *
- * Using isHidden keeps step indices stable so startIndex works correctly for
- * openFromTemplate (5) and openFromClone (6) without wizard key resets on mode change.
+ * PatternFly Wizard (WizardNav) inside Modal; step transitions via BFF session API.
+ * Per-step operate / validate contract: docs/specs/ui-flows/create-virtual-machine-wizard.yaml (step_worksheets).
  */
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react'
 import {
+  Alert,
+  Bullseye,
+  Button,
+  Flex,
   Modal,
+  Spinner,
   Wizard,
-  WizardFooter,
+  WizardFooterWrapper,
   WizardHeader,
   WizardStep,
 } from '@patternfly/react-core'
-import type { ComputeInstance, DemoTenantId, OsType } from '@osac/api-contracts'
-import { VM_TEMPLATES } from '@osac/api-contracts'
-import { INITIAL_STATE } from './createVmWizard/constants'
+import type { ComputeInstance, DemoTenantId } from '@osac/api-contracts'
+import {
+  advanceWizardSession,
+  abandonWizardSession,
+  backWizardSession,
+  CreateVmWizardApiError,
+  finalizeWizardSession,
+  startWizardSession,
+  type WizardSessionResponse,
+} from '../../api/createVmWizardClient'
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react'
+import { draftFromSession, INITIAL_STATE } from './createVmWizard/constants'
+import { getWizardOrderedSteps } from './createVmWizard/stepIds'
 import {
   BootSourceStep,
   CloneSourceStep,
@@ -39,17 +43,42 @@ import {
 import type { CreateVmWizardHandle, DeploymentMode, WizardState } from './createVmWizard/types'
 export type { CreateVmWizardHandle } from './createVmWizard/types'
 
-// Step indices (1-based, matching WizardStep order below).
-// Exported as named constants so they are easy to grep and update if steps are reordered.
-const STEP_INDEX_DEPLOYMENT   = 1
-const STEP_INDEX_TEMPLATE     = 5
-const STEP_INDEX_CLONE_SOURCE = 6
+const STEP_LABELS: Record<string, string> = {
+  deployment: 'Select a creation method',
+  'guest-os': 'Guest operating system',
+  'boot-source': 'Boot source',
+  compute: 'Compute resources',
+  template: 'Templates',
+  'clone-source': 'Source VM',
+  customization: 'Customization',
+  review: 'Review',
+}
 
 interface Props {
   existingVms: ComputeInstance[]
   tenant: DemoTenantId
-  onProvision: (vm: Partial<ComputeInstance>) => void
+  onProvision: (vm: ComputeInstance) => void
   defaultMode?: DeploymentMode
+}
+
+function canProceedLocal(stepId: string, state: WizardState): boolean {
+  switch (stepId) {
+    case 'guest-os':
+      return !!state.osFamilyNew && !!state.osTypeNew
+    case 'boot-source':
+      return !!state.bootSource
+    case 'compute':
+      return !!state.cpuNew.trim() && !!state.memoryNew.trim()
+    case 'template':
+      return !!state.selectedTemplateId
+    case 'clone-source':
+      return !!state.cloneSourceVmId && !!state.cloneNewName.trim()
+    case 'customization':
+      if (state.mode === 'template') return !!state.templateVmName.trim()
+      return true
+    default:
+      return true
+  }
 }
 
 export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function CreateVmWizard(
@@ -57,234 +86,293 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(false)
-  const [state, setState] = useState<WizardState>({ ...INITIAL_STATE, mode: defaultMode })
-  const [wizardKey, setWizardKey] = useState(0)
-  const [startStepIndex, setStartStepIndex] = useState(STEP_INDEX_DEPLOYMENT)
+  const [loading, setLoading] = useState(false)
+  const [session, setSession] = useState<WizardSessionResponse | null>(null)
+  const [draft, setDraft] = useState<WizardState>(() =>
+    draftFromSession({ ...INITIAL_STATE, mode: defaultMode }),
+  )
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [pending, setPending] = useState(false)
   const [cloneSearch, setCloneSearch] = useState('')
-  const [templateSearch, setTemplateSearch] = useState('')
+
+  const resetLocal = useCallback(() => {
+    setSession(null)
+    setDraft(draftFromSession({ ...INITIAL_STATE, mode: defaultMode }))
+    setFieldErrors({})
+    setCloneSearch('')
+  }, [defaultMode])
+
+  const runStart = useCallback(async (body: Parameters<typeof startWizardSession>[0]) => {
+    setLoading(true)
+    setFieldErrors({})
+    try {
+      const s = await startWizardSession(body)
+      setSession(s)
+      setDraft(draftFromSession(s.draft as Partial<WizardState>))
+    } catch (err) {
+      const msg =
+        err instanceof CreateVmWizardApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      setFieldErrors({ _api: msg })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useImperativeHandle(ref, () => ({
     open() {
-      setState({ ...INITIAL_STATE })
-      setWizardKey((k) => k + 1)
-      setStartStepIndex(STEP_INDEX_DEPLOYMENT)
+      resetLocal()
       setIsOpen(true)
+      void runStart({ entry: 'dashboard' })
     },
     openFromTemplate(templateId) {
-      setState({ ...INITIAL_STATE, mode: 'template', selectedTemplateId: templateId })
-      setWizardKey((k) => k + 1)
-      setStartStepIndex(STEP_INDEX_TEMPLATE)
+      resetLocal()
       setIsOpen(true)
+      void runStart({ entry: 'catalog', presetTemplateId: templateId })
     },
     openFromClone(sourceVmId) {
-      setState({ ...INITIAL_STATE, mode: 'clone', cloneSourceVmId: sourceVmId })
-      setWizardKey((k) => k + 1)
-      setStartStepIndex(STEP_INDEX_CLONE_SOURCE)
+      resetLocal()
       setIsOpen(true)
+      void runStart({ entry: 'clone_drawer', presetCloneSourceVmId: sourceVmId })
     },
   }))
 
   const update = useCallback(<K extends keyof WizardState>(key: K, value: WizardState[K]) => {
-    setState((prev) => ({ ...prev, [key]: value }))
+    setDraft((prev) => ({ ...prev, [key]: value }))
   }, [])
 
-  const canProceedForStep = useCallback(
-    (stepId: string | undefined): boolean => {
-      switch (stepId) {
-        case 'guest-os':
-          return !!state.osFamilyNew && !!state.osTypeNew
-        case 'boot-source':
-          return !!state.bootSource
-        case 'compute':
-          return !!state.cpuNew.trim() && !!state.memoryNew.trim()
-        case 'template':
-          return !!state.selectedTemplateId
-        case 'clone-source':
-          return (
-            !!state.cloneSourceVmId &&
-            !!state.cloneNewName.trim() &&
-            existingVms.length > 0
-          )
-        case 'customization':
-          if (state.mode === 'template') return !!state.templateVmName.trim()
-          return true
-        default:
-          return true
+  const close = useCallback(async () => {
+    if (session?.sessionId) {
+      try {
+        await abandonWizardSession(session.sessionId)
+      } catch {
+        /* ignore */
       }
-    },
-    [state, existingVms],
-  )
-
-  const close = useCallback(() => {
+    }
     setIsOpen(false)
-    setState({ ...INITIAL_STATE, mode: defaultMode })
-    setWizardKey((k) => k + 1)
-    setStartStepIndex(STEP_INDEX_DEPLOYMENT)
-  }, [defaultMode])
+    resetLocal()
+  }, [session?.sessionId, resetLocal])
 
-  const handleProvision = useCallback(() => {
-    const now = Date.now()
-    const id = `vm-created-${now}`
-    const osMap: Record<string, OsType> = {
-      rhel: 'rhel',
-      linux: 'linux',
-      'other-linux': 'linux',
-      windows: 'windows',
+  const orderedSteps = useMemo(() => {
+    if (!session) return [] as string[]
+    return getWizardOrderedSteps(draft.mode, session.skipDeployment)
+  }, [session, draft.mode])
+
+  const isFirst = session ? session.activeIndex <= 0 : true
+  const isReview = session?.activeStepId === 'review'
+  const canNext = session ? canProceedLocal(session.activeStepId, draft) : false
+
+  const handleBack = useCallback(async () => {
+    if (!session?.sessionId || isFirst) return
+    setPending(true)
+    setFieldErrors({})
+    try {
+      const s = await backWizardSession(session.sessionId)
+      setSession(s)
+      setDraft(draftFromSession(s.draft as Partial<WizardState>))
+    } catch (err) {
+      const msg =
+        err instanceof CreateVmWizardApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      setFieldErrors({ _api: msg })
+    } finally {
+      setPending(false)
     }
-    let newVm: ComputeInstance
+  }, [session, isFirst])
 
-    if (state.mode === 'clone') {
-      const src = existingVms.find((v) => v.id === state.cloneSourceVmId)
-      newVm = {
-        ...(src ?? {}),
-        id,
-        metadata: {
-          name: state.cloneNewName.trim() || `${src?.metadata.name ?? 'vm'}-clone`,
-          createdAt: new Date().toISOString(),
-        },
-        status: { state: 'stopped' },
-        description: src ? `Cloned from ${src.metadata.name}.` : 'Cloned VM.',
-        createdAtMs: now,
-      } as ComputeInstance
-    } else if (state.mode === 'template') {
-      const tpl = VM_TEMPLATES.find((t) => t.id === state.selectedTemplateId)
-      newVm = {
-        id,
-        metadata: {
-          name: state.templateVmName.trim() || `${tpl?.id ?? 'vm'}-instance`,
-          createdAt: new Date().toISOString(),
-        },
-        spec: { template: tpl?.id, cores: 2, memoryGib: 8 },
-        status: { state: state.startAfterCreate ? 'running' : 'stopped' },
-        os: osMap[tpl?.icon ?? 'linux'] ?? 'linux',
-        description: tpl?.description,
-        createdAtMs: now,
+  const handleNextOrCreate = useCallback(async () => {
+    if (!session?.sessionId) return
+    setPending(true)
+    setFieldErrors({})
+    try {
+      if (isReview) {
+        const { object } = await finalizeWizardSession(session.sessionId, draft)
+        onProvision(object)
+        setIsOpen(false)
+        resetLocal()
+        return
       }
-    } else {
-      newVm = {
-        id,
-        metadata: {
-          name: state.hostnameNew.trim() || `vm-${id.slice(-6)}`,
-          createdAt: new Date().toISOString(),
-        },
-        spec: {
-          cores: parseInt(state.cpuNew, 10) || 2,
-          memoryGib: parseInt(state.memoryNew, 10) || 4,
-        },
-        status: { state: state.startAfterCreate ? 'running' : 'stopped' },
-        os: osMap[state.osFamilyNew] ?? 'linux',
-        createdAtMs: now,
+      const s = await advanceWizardSession(session.sessionId, session.activeStepId, draft)
+      setSession(s)
+      setDraft(draftFromSession(s.draft as Partial<WizardState>))
+    } catch (err) {
+      if (err instanceof CreateVmWizardApiError && err.fieldErrors) {
+        setFieldErrors(err.fieldErrors)
+      } else {
+        const msg =
+          err instanceof CreateVmWizardApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : String(err)
+        setFieldErrors({ _api: msg })
       }
+    } finally {
+      setPending(false)
     }
+  }, [session, isReview, draft, onProvision, resetLocal])
 
-    onProvision(newVm)
-    close()
-  }, [state, existingVms, onProvision, close])
+  const renderStepBody = (stepId: string) => {
+    switch (stepId) {
+      case 'deployment':
+        return <DeploymentStep state={draft} update={update} />
+      case 'guest-os':
+        return <GuestOsStep state={draft} update={update} />
+      case 'boot-source':
+        return <BootSourceStep state={draft} update={update} />
+      case 'compute':
+        return <ComputeStep state={draft} update={update} />
+      case 'template':
+        return <TemplateStep state={draft} update={update} />
+      case 'clone-source':
+        return (
+          <CloneSourceStep
+            state={draft}
+            update={update}
+            search={cloneSearch}
+            setSearch={setCloneSearch}
+            vms={existingVms}
+          />
+        )
+      case 'customization':
+        return <CustomizationStep state={draft} update={update} />
+      case 'review':
+        return <ReviewStep state={draft} update={update} vms={existingVms} />
+      default:
+        return null
+    }
+  }
 
-  const filteredTemplates = useMemo(() => {
-    if (!templateSearch) return VM_TEMPLATES
-    const q = templateSearch.toLowerCase()
-    return VM_TEMPLATES.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        (t.description ?? '').toLowerCase().includes(q) ||
-        (t.tags ?? []).some((tag) => tag.toLowerCase().includes(q)),
-    )
-  }, [templateSearch])
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0
 
-  const filteredCloneVms = useMemo(() => {
-    if (!cloneSearch) return existingVms
-    const q = cloneSearch.toLowerCase()
-    return existingVms.filter((vm) => vm.metadata.name.toLowerCase().includes(q))
-  }, [cloneSearch, existingVms])
+  const renderApiAlert = (stepId: string) =>
+    hasFieldErrors && session && session.activeStepId === stepId ? (
+      <Alert
+        variant="danger"
+        isInline
+        title="Could not continue"
+        style={{ marginBottom: 'var(--pf-t--global--spacer--md)' }}
+      >
+        {fieldErrors._api ??
+          Object.entries(fieldErrors)
+            .filter(([k]) => k !== '_api')
+            .map(([k, v]) => (
+              <div key={k}>
+                <strong>{k}</strong>: {v}
+              </div>
+            ))}
+      </Alert>
+    ) : null
 
-  const isNew      = state.mode === 'new'
-  const isTpl      = state.mode === 'template'
-  const isClone    = state.mode === 'clone'
+  /** WizardHeader already renders a close control; Modal `onClose` would add a second box close button. */
+  const hideModalBoxClose = Boolean(session && !loading)
+  const isDeploymentStep = session?.activeStepId === 'deployment'
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={close}
+      onClose={hideModalBoxClose ? undefined : close}
+      onEscapePress={
+        hideModalBoxClose
+          ? () => {
+              void close()
+            }
+          : undefined
+      }
       variant="large"
+      width="min(980px, 86vw)"
+      maxWidth="88vw"
       aria-label="Create virtual machine wizard"
+      ouiaId="create-vm-wizard-modal"
     >
-      <Wizard
-        key={wizardKey}
-        startIndex={startStepIndex}
-        height={560}
-        onClose={close}
-        onSave={handleProvision}
-        header={
-          <WizardHeader
-            title="Create virtual machine"
-            titleId="create-vm-wizard-title"
-            description="Configure guest OS, boot source, and resources, then review and create."
-            descriptionId="create-vm-wizard-desc"
-            onClose={close}
-            closeButtonAriaLabel="Close wizard"
-          />
-        }
-        footer={(activeStep, onNext, onBack, onCloseFooter) => (
-          <WizardFooter
-            activeStep={activeStep}
-            onNext={onNext}
-            onBack={onBack}
-            onClose={onCloseFooter}
-            nextButtonText={activeStep?.id === 'review' ? 'Create virtual machine' : 'Next'}
-            isBackDisabled={activeStep?.id === 'deployment-details'}
-            isNextDisabled={!canProceedForStep(activeStep?.id as string)}
-          />
-        )}
-      >
-        {/* Step 1 — always shown */}
-        <WizardStep id="deployment-details" name="Select a creation method">
-          <DeploymentStep state={state} update={update} />
-        </WizardStep>
-
-        {/* Steps 2-4 — new path only */}
-        <WizardStep id="guest-os" name="Guest operating system" isHidden={!isNew}>
-          <GuestOsStep state={state} update={update} />
-        </WizardStep>
-        <WizardStep id="boot-source" name="Boot source" isHidden={!isNew}>
-          <BootSourceStep state={state} update={update} />
-        </WizardStep>
-        <WizardStep id="compute" name="Compute resources" isHidden={!isNew}>
-          <ComputeStep state={state} update={update} />
-        </WizardStep>
-
-        {/* Step 5 — template path only */}
-        <WizardStep id="template" name="Templates" isHidden={!isTpl}>
-          <TemplateStep
-            state={state}
-            update={update}
-            search={templateSearch}
-            setSearch={setTemplateSearch}
-            templates={filteredTemplates}
-          />
-        </WizardStep>
-
-        {/* Step 6 — clone path only */}
-        <WizardStep id="clone-source" name="Source VM" isHidden={!isClone}>
-          <CloneSourceStep
-            state={state}
-            update={update}
-            search={cloneSearch}
-            setSearch={setCloneSearch}
-            vms={filteredCloneVms}
-          />
-        </WizardStep>
-
-        {/* Step 7 — new + template only */}
-        <WizardStep id="customization" name="Customization" isHidden={isClone}>
-          <CustomizationStep state={state} update={update} />
-        </WizardStep>
-
-        {/* Step 8 — always shown */}
-        <WizardStep id="review" name="Review and create">
-          <ReviewStep state={state} update={update} />
-        </WizardStep>
-      </Wizard>
+      {loading ? (
+        <Bullseye style={{ minHeight: 320 }}>
+          <Spinner aria-label="Loading wizard" />
+        </Bullseye>
+      ) : !session ? (
+        <Bullseye style={{ minHeight: 320 }}>
+          {hasFieldErrors ? (
+            <>
+              <Alert variant="danger" title="Wizard could not start" style={{ maxWidth: 480 }}>
+                {fieldErrors._api ?? 'An error occurred.'}
+              </Alert>
+              <Button
+                variant="primary"
+                onClick={() => void close()}
+                style={{ marginTop: 'var(--pf-t--global--spacer--md)' }}
+              >
+                Close
+              </Button>
+            </>
+          ) : (
+            <Spinner aria-label="Loading wizard" />
+          )}
+        </Bullseye>
+      ) : (
+        <Wizard
+          key={`${session.sessionId}-${session.activeIndex}`}
+          className={['create-vm-wizard', isDeploymentStep ? 'create-vm-wizard--deployment-step' : '']
+            .filter(Boolean)
+            .join(' ')}
+          navAriaLabel="Create virtual machine steps"
+          startIndex={session.activeIndex + 1}
+          height="min(680px, calc(100vh - 120px))"
+          header={
+            <WizardHeader
+              title="Create virtual machine"
+              description="Complete the steps to provision a virtual machine."
+              onClose={close}
+              closeButtonAriaLabel="Close wizard"
+            />
+          }
+          footer={
+            <WizardFooterWrapper>
+              <Flex
+                style={{ width: '100%' }}
+                justifyContent={{ default: 'justifyContentFlexStart' }}
+                alignItems={{ default: 'alignItemsCenter' }}
+                flexWrap={{ default: 'wrap' }}
+                gap={{ default: 'gapMd' }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={handleBack}
+                  isDisabled={isFirst || pending}
+                  isAriaDisabled={isFirst || pending}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => void handleNextOrCreate()}
+                  isDisabled={!canNext || pending}
+                  isAriaDisabled={!canNext || pending}
+                  isLoading={pending}
+                >
+                  {isReview ? 'Create virtual machine' : 'Next'}
+                </Button>
+                <Button variant="link" onClick={() => void close()} isDisabled={pending}>
+                  Cancel
+                </Button>
+              </Flex>
+            </WizardFooterWrapper>
+          }
+          onClose={close}
+        >
+          {orderedSteps.map((stepId) => (
+            <WizardStep key={stepId} id={stepId} name={STEP_LABELS[stepId] ?? stepId}>
+              {renderApiAlert(stepId)}
+              {renderStepBody(stepId)}
+            </WizardStep>
+          ))}
+        </Wizard>
+      )}
     </Modal>
   )
 })

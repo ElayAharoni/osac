@@ -95,8 +95,14 @@ context:
           - clusterTemplate.title
           - clusterTemplate.description
       - name: CreateVirtualMachineWizard
-        description: New / template / clone paths; maps to compute instance spec fields.
+        description: >-
+          New / template / clone paths inside Modal + PatternFly Wizard; step validation and draft
+          held in OSAC BFF wizard session API; finalize persists compute instance (demo mock or proxied).
         data_requirements:
+          - bff.createVmWizard.sessionId
+          - bff.createVmWizard.activeStepId
+          - bff.createVmWizard.stepNav[] (id, label, optional status for WizardNavItem state)
+          - bff.createVmWizard.draft (partial ComputeInstance-shaped object updated each advance)
           - computeInstanceTemplate.id
           - computeInstance.spec.template
           - computeInstance.spec.templateParameters
@@ -144,11 +150,17 @@ context:
         - GET /api/fulfillment/v1/cluster_templates/{id}
         - Optional GET /api/fulfillment/v1/compute_instance_templates for VM-specific catalogs
     - name: create-virtual-machine-wizard
-      description: Compose desired state then submit for asynchronous fulfillment.
+      description: >-
+        BFF-orchestrated wizard sessions (ephemeral UI) compose desired state, then finalize persists
+        the VM; optional fulfillment template GETs may hydrate BFF when not mocked.
       steps:
-        - Resolve template GET /api/fulfillment/v1/compute_instance_templates/{id}
-        - POST /api/fulfillment/v1/compute_instances (see contract_note below) OR platform-managed create
-        - Poll GET /api/fulfillment/v1/compute_instances/{id} until status reflects RUNNING or FAILED
+        - POST /api/osac/bff/v1/create-vm-wizard/sessions (entry preset + deployment hint)
+        - Repeat POST /api/osac/bff/v1/create-vm-wizard/sessions/{sessionId}/advance until review complete
+        - Optional POST .../back when user revisits earlier steps via WizardNav
+        - POST /api/osac/bff/v1/create-vm-wizard/sessions/{sessionId}/finalize — server creates instance (demo maps to mock store or POST fulfillment when allowed)
+        - DELETE /api/osac/bff/v1/create-vm-wizard/sessions/{sessionId} on cancel/close
+        - Optional GET /api/fulfillment/v1/compute_instance_templates/{id} when BFF proxies template metadata
+        - Optional Poll GET /api/fulfillment/v1/compute_instances/{id} after real upstream create
     - name: manage-virtual-machines
       description: Operate lifecycle on existing compute instances.
       steps:
@@ -177,6 +189,64 @@ context:
       steps:
         - GET console access endpoint
         - gRPC bidi Connect(stream) for real I/O (not exposed as REST)
+
+  # Same-origin OSAC BFF JSON routes (not fulfillment gRPC-gateway paths). Documented here so UI
+  # and BFF implementations share one contract file with fulfillment alignment notes.
+  bff_demo_osac_extensions:
+    create_virtual_machine_wizard:
+      base_path: /api/osac/bff/v1/create-vm-wizard
+      auth: Bearer session (same as other BFF APIs in demo); tenant scoping matches signed-in context.
+      session_storage: >-
+        In-memory map keyed by sessionId for mock mode; production-shaped deployments may use Redis
+        or opaque encrypted cookies — out of scope for this YAML detail.
+      step_ids: >-
+        activeStepId and advance fromStepId use exactly: deployment, guest-os, boot-source, compute,
+        template, clone-source, customization, review. Ordered lists per mode and skipDeployment flag
+        match ui-flow canonical_bff_step_ids; BFF and client MUST use the same strings (see
+        create-virtual-machine-wizard.yaml step_worksheets).
+      endpoints:
+        - name: create_vm_wizard_session_start
+          method: POST
+          path: /sessions
+          description: >-
+            Create a wizard session. Body includes optional deploymentMethod (new|template|clone),
+            entry (dashboard|catalog|clone_drawer), optional presetTemplateId, optional presetCloneSourceVmId.
+            Response returns sessionId, activeStepId, activeIndex, skipDeployment (boolean; when true the
+            ordered path omits deployment — catalog template or clone-drawer preset), stepNav[], full draft
+            snapshot, and optional fieldErrors on error.
+        - name: create_vm_wizard_session_get
+          method: GET
+          path: /sessions/{sessionId}
+          description: >-
+            Return current activeStepId, stepNav, draft — used after errors or focus recovery; not a
+            substitute for URL-routed wizard state (wizard remains ephemeral).
+        - name: create_vm_wizard_advance
+          method: POST
+          path: /sessions/{sessionId}/advance
+          description: >-
+            JSON body includes fromStepId (must match server activeStepId) and draft (WizardState-shaped
+            object merged into server draft). BFF validates the active step, increments activeIndex on success,
+            returns next activeStepId, skipDeployment, stepNav, and draft; 400 with fieldErrors keeps client on same step.
+        - name: create_vm_wizard_back
+          method: POST
+          path: /sessions/{sessionId}/back
+          description: >-
+            Optional explicit back; body may include currentStepId. BFF moves to previous step when allowed;
+            may be folded into advance with direction if implementation prefers a single endpoint.
+        - name: create_vm_wizard_finalize
+          method: POST
+          path: /sessions/{sessionId}/finalize
+          description: >-
+            Validates full draft, persists compute instance (mock vmStore append or fulfillment POST when
+            integrated), returns created object; 4xx on business validation failure. Deletes or closes session.
+        - name: create_vm_wizard_abandon
+          method: DELETE
+          path: /sessions/{sessionId}
+          description: Abandon draft when modal closes without finalize; idempotent.
+      finalize_persistence_note: >-
+        Demo BFF finalize should reuse the same persistence path as today’s client-side provision
+        (mock POST /api/fulfillment/v1/compute_instances semantics) until a public order API exists;
+        keep behavior aligned with contract_note_compute_instance_create for real upstream.
 
 requirements:
   functional:
