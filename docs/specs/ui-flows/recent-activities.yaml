@@ -1,6 +1,13 @@
 flow: Recent activities
 statechart_ref: ../statecharts/recent-activities.statechart.yaml
 
+backend:
+  description: Full-page activity feed; align with backend-fulfillment.yaml flows.recent-activities and context.osac_bff_runtime_modes.
+  dev:
+    primary: GET /api/events/v1/events (fulfillment Events.Watch; BFF must proxy in OSAC_API_MODE=dev)
+  mock:
+    note: May use BFF mock JSON or client-derived activities until stream integration ships.
+
 rbac:
   required_permissions_by_step:
     ra_activity_feed:

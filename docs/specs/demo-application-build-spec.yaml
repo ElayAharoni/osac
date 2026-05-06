@@ -123,6 +123,12 @@ spec_hierarchy:
     rule: >-
       BFF and client use public REST shapes under /api/fulfillment/v1 (and documented
       capabilities/events/console). Cross-check UI data_requirements sections in that file.
+      In OSAC_API_MODE=dev, proxy GET /api/events/v1/events to fulfillment for dashboard and
+      full-page activities per context.osac_bff_runtime_modes in backend-fulfillment.yaml.
+      **Non-mock integration target** (OIDC + capabilities, full proxy matrix, client/hooks for
+      orgs/users/networks/events, replace VM_TEMPLATES/DEMO_* where APIs exist, TS alignment,
+      utilization chart gap policy) is **context.osac_real_api_integration** in the same file;
+      **mock mode behavior MUST NOT change** per that section’s mock_mode_invariant.
 
 security_and_network:
   browser_must_not:
@@ -149,6 +155,10 @@ implementation_phases:
       - Add libs/api-contracts with fulfillment-aligned OpenAPI (public surface primary).
       - Mark operations that are mocked in BFF (gaps vs merged fulfillment, private mocks).
       - Generate typed clients or fetch wrappers for apps/app-backend and apps/app-frontend.
+      - >-
+        For **dev/real mode** (context.osac_real_api_integration.typescript_models): prefer
+        types generated from fulfillment-service’s published OpenAPI (or equivalent); keep
+        hand-written DEMO_* shapes for mock-only fixtures without blocking codegen.
     gates:
       - OpenAPI validates; codegen runs in CI without drift.
 
@@ -162,6 +172,11 @@ implementation_phases:
         Register OSAC BFF extension routes for create-vm-wizard sessions under
         /api/osac/bff/v1/create-vm-wizard per docs/specs/backend-fulfillment.yaml (bff_demo_osac_extensions);
         mock mode holds sessions in process memory; document proxy behavior when fulfillment gains parity.
+      - >-
+        When OSAC_API_MODE=dev, implement **bff_proxy_matrix_dev** (context.osac_real_api_integration):
+        forward /api/fulfillment/v1, /api/events/v1, and /api/osac/public/v1 with Authorization
+        passthrough; stream /api/events/v1 without buffering entire body; avoid forcing JSON parse
+        on non-JSON upstream responses.
       - Align security headers and auth bridging with osac-ui server patterns.
       - Serve production SPA from app-backend in prod mode; expose /health (and /ready if used).
       - Image build copies prebuilt assets from apps/app-frontend into the BFF app artifact so **one container** serves API + static UI.
@@ -190,6 +205,12 @@ implementation_phases:
         Bundler/dev server is **implementation choice** (see code_target.toolchain.spa_bundler_guidance).
         Depends on libs/ui-components (and optionally generated types from libs/api-contracts).
         Shell, forms, and tables follow **design-system.yaml** (PatternFly 6 page layout, tokens, a11y).
+      - >-
+        **Dev/real mode** (mock unchanged): implement authentication_oidc and client_and_hooks_expansion
+        in context.osac_real_api_integration — capabilities before login, Bearer on proxied calls,
+        TanStack hooks for organizations, users, virtual_networks, subnets, security_groups, events
+        stream, compute_instance_templates as needed; replace VM_TEMPLATES / DEMO_* per
+        replace_mock_data_sources when not in mock mode; honor utilization_metrics_charts policy.
       - Map routing and feature modules to FLOW-INDEX flows[].id (welcome, auth, shell, dashboards,
         catalog, wizard, VMs, activities, admin, console demo).
       - Respect cross_flow_entry_points and canonical_step_ids for navigation and deep links.
@@ -232,6 +253,11 @@ acceptance_checklist:
   - Structural layout prefers PatternFly primitives; raw HTML wrappers are minimized and justified when unavoidable.
   - Automated PatternFly primitive guard passes (`pnpm check:pf-primitives`) for app/frontend and shared UI component TSX sources.
   - HTTP behavior matches backend-fulfillment.yaml for public operations the UI uses; mocks documented for gaps/private.
+  - >-
+    When OSAC_API_MODE=dev, integration matches **context.osac_real_api_integration** (proxy matrix,
+    OIDC/capabilities, hooks, POST `{ object }`, events stream, DEMO_* / VM_TEMPLATES replacement,
+    TS model alignment, utilization chart gap choice). When OSAC_API_MODE=mock, behavior stays on
+    fixtures and existing demo types per mock_mode_invariant.
   - Browser never calls private fulfillment REST; private only via BFF (real or mocked).
   - pnpm test (Vitest) and Cypress E2E pass in CI.
   - Deploy manifests keep ConfigMap key parity with Projects/osac-ui/deploy for shared operator vocabulary.

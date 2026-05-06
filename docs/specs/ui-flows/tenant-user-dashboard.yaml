@@ -15,6 +15,17 @@ applies_when: >-
   Authenticated shell with demoShellRole tenantUser after Northstar Bank or Bluestone Financial Group
   (tenant id evergreen) sign-in — not provider admin and not tenant admin.
 
+backend:
+  description: Dashboard data sources by BFF mode (see backend-fulfillment.yaml context.osac_bff_runtime_modes).
+  utilization_charts:
+    note: Time series remain demo/synthetic until a metrics API exists; not driven by /api/events/v1/events.
+  recent_activities_sidebar:
+    dev:
+      primary: GET /api/events/v1/events (fulfillment Events.Watch; proxied by BFF with Bearer)
+      secondary: GET /api/fulfillment/v1/compute_instances for VM stat cards and optional hydration only
+    mock:
+      primary: Client buildRecentActivities from compute instance list and/or BFF mock GET /api/events/v1/events
+
 steps:
   - id: tud_dashboard_home
     title: VM workspace dashboard

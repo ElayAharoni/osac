@@ -14,6 +14,10 @@ ai-hints:
     Master catalog for OSAC UX flow specs. Read this file first, then rbac.yaml for role and
     permission definitions, statecharts for machine semantics, ui-flows for UX detail, then
     design-system.yaml and backend-fulfillment.yaml for implementation constraints.
+    For **dev/real** SPA↔fulfillment integration (OIDC via capabilities, BFF proxy matrix including
+    events and console paths, client/hooks for orgs/users/networks/events, replacing VM_TEMPLATES/DEMO_*,
+    TS alignment, utilization chart gap), see **context.osac_real_api_integration** in
+    backend-fulfillment.yaml; mock mode remains unchanged per that section.
   readOrder:
     - FLOW-INDEX.yaml
     - rbac.yaml
@@ -95,7 +99,9 @@ flows:
       theme, account menu, logout, breadcrumb for recent activities; Vertexa aggregates tenant VMs in prototype.
   - id: tenant-user-dashboard
     file: ui-flows/tenant-user-dashboard.yaml
-    summary: VMaaS home — power-state stat cards; create VM; deep links into My VMs with filters.
+    summary: >-
+      VMaaS home — power-state stat cards; create VM; deep links into My VMs with filters.
+      In dev mode, dashboard "Recent activities" sidebar SHALL use GET /api/events/v1/events (see backend-fulfillment.yaml).
   - id: vm-template-catalog
     file: ui-flows/vm-template-catalog.yaml
     summary: Template gallery for tenant user, tenant admin template catalog, provider global templates; opens create wizard from template.

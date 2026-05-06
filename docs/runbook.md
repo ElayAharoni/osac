@@ -7,6 +7,7 @@
 3. `pnpm --filter @osac/osac-frontend run dev`
 4. Open `http://localhost:5173`
 5. For fulfillment proxy mode: `OSAC_API_MODE=dev FULFILLMENT_API_URL=https://<host>/api pnpm --filter @osac/osac-backend run dev`
+6. **Spec:** In dev mode, dashboard activities should use fulfillment `GET /api/events/v1/events` (BFF proxy — see `docs/specs/backend-fulfillment.yaml` `osac_bff_runtime_modes`). Implementation may still be mock-only until the BFF forwards `/api/events/v1/*`.
 
 ## Storybook
 

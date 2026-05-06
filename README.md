@@ -118,7 +118,7 @@ Mocked endpoints:
 
 ### Dev mode (real upstream API)
 
-The BFF acts as a transparent proxy to a real fulfillment API. The frontend code is **unchanged** — only the BFF environment changes.
+Set `OSAC_API_MODE=dev` and `FULFILLMENT_API_URL` so the BFF can forward browser traffic to the fulfillment REST gateway.
 
 ```bash
 OSAC_API_MODE=dev \
@@ -126,9 +126,11 @@ FULFILLMENT_API_URL=https://fulfillment.your-env.example.com \
 pnpm dev:backend
 ```
 
-The BFF forwards every `/api/fulfillment/v1/*` request to the upstream URL, passing through the `Authorization` header from the browser.
+**Today (minimal integration):** the BFF forwards `/api/fulfillment/v1/*` and passes through the `Authorization` header. Much of the SPA still reads `DEMO_*` fixtures and `VM_TEMPLATES` from `libs/api-contracts` even in dev mode.
 
-> **Note:** Authentication token acquisition is not yet implemented in the frontend (see [What needs real integration](#what-needs-real-integration-or-further-testing)).
+**Spec target — non-mock flow:** `docs/specs/backend-fulfillment.yaml` → `context.osac_real_api_integration` — expand the BFF proxy to `/api/events/v1/*` and `/api/osac/public/v1/*` (streaming-safe), wire OIDC from `GET /api/fulfillment/v1/capabilities`, extend the SPA client and TanStack hooks for organizations, users, networks, and events, replace mock-only data where fulfillment has resources, align TypeScript with published fulfillment OpenAPI (or codegen), and treat utilization charts as an explicit gap or product-owned metrics API. **Mock mode (`OSAC_API_MODE=mock`) stays unchanged.**
+
+> **Note:** OIDC / Bearer acquisition in the SPA is still a gap vs that spec (see [What needs real integration](#what-needs-real-integration-or-further-testing)).
 
 ### Environment variables reference (backend)
 
@@ -185,7 +187,7 @@ http://localhost:5173/?osac-entry=evergreen-admin
 | VM detail drawer                   | ✅     | Overview, Networking, Conditions tabs; power actions                |
 | Create VM wizard                   | ✅     | Modal wizard; steps under `components/vm/createVmWizard/`. POSTs to BFF. |
 | Template catalog                   | ✅     | Searchable gallery, detail drawer, launches wizard                  |
-| Recent activities feed             | ✅     | Derived from live VM list                                           |
+| Recent activities feed             | ✅     | Mock: derived from VM list. **Dev (spec):** `GET /api/events/v1/events` — see `docs/specs/backend-fulfillment.yaml` |
 | Tenant admin dashboard             | ✅     | Summary stats, navigation tiles                                     |
 | Tenant admin — Users               | ✅     | Table of demo users                                                 |
 | Tenant admin — Quota control       | ✅     | Resource consumption visualization                                  |
@@ -203,11 +205,11 @@ http://localhost:5173/?osac-entry=evergreen-admin
 | Area                      | Status | Notes                                                                |
 | ------------------------- | ------ | -------------------------------------------------------------------- |
 | Mock fulfillment routes   | ✅     | Full CRUD for VMs; read-only for templates, orgs, networks           |
-| Upstream proxy (dev mode) | ✅     | Transparent forwarding with `Authorization` header passthrough       |
+| Upstream proxy (dev mode) | ⚠️     | `/api/fulfillment/v1/*` today; **spec:** also `/api/events/v1/*`, `/api/osac/public/v1/*` (see `context.osac_real_api_integration`) |
 | Health / readiness probes | ✅     | `/health` and `/ready`                                               |
 | SPA static file serving   | ✅     | Serves `public/` in production; SPA fallback for client-side routing |
 | CORS                      | ✅     | Open in dev, disabled in production                                  |
-| Event stream endpoint     | ✅     | `/api/events/v1/events` — mock SSE-style activity events             |
+| Event stream endpoint     | ✅     | `/api/events/v1/events` — mock static JSON today; **dev (spec):** proxy to fulfillment Events watch |
 | Console access stub       | ✅     | `/api/osac/public/v1/console/*` — returns mock URLs                  |
 
 ### Shared libraries
@@ -225,7 +227,7 @@ http://localhost:5173/?osac-entry=evergreen-admin
 
 ## What needs real integration or further testing
 
-The following areas work in mock mode but require additional work before connecting to a real environment:
+Authoritative checklist for the **dev/real** integration target: `docs/specs/backend-fulfillment.yaml` → **`context.osac_real_api_integration`** (mock mode invariant is spelled out there). The following areas work in mock mode but require additional work before the SPA fully satisfies that contract:
 
 ### Authentication (highest priority)
 
@@ -265,8 +267,9 @@ The following areas work in mock mode but require additional work before connect
 
 ### Real-time events / SSE
 
-- The event stream endpoint (`/api/events/v1/events`) returns a static JSON array. A real implementation would use Server-Sent Events or WebSocket.
-- **Integration needed:** Implement SSE streaming in the BFF and consume it with `EventSource` in the frontend.
+- **Spec (dev mode):** Dashboard and full-page recent activities **SHOULD** use fulfillment’s `GET /api/events/v1/events` (Events watch) with the BFF proxying that path when `OSAC_API_MODE=dev`, same Authorization passthrough as `/api/fulfillment/v1/*`. See `docs/specs/backend-fulfillment.yaml` (`context.osac_bff_runtime_modes`, flow `tenant-user-dashboard-activities`).
+- **Current code:** The event route still returns a static JSON array from the BFF mock; the frontend does not yet open an `EventSource` / stream consumer.
+- **Integration needed:** Implement BFF proxy for `/api/events/v1/*` in dev mode; implement SSE or chunked stream handling and consume it in the dashboard + recent-activities pages per the spec.
 
 ### Network topology — real data
 

@@ -47,6 +47,186 @@ context:
       enums: PROTO_JSON (e.g. COMPUTE_INSTANCE_STATE_RUNNING)
       well_known_types: google.protobuf wrappers as documented in compute_instance_type.proto
 
+  osac_bff_runtime_modes:
+    description: >
+      Projects/osac BFF (apps/app-backend) + SPA: how tenant dashboard "Recent activities"
+      (DashboardUtilizationSection sidebar) and the full-page recent-activities flow obtain data.
+    mock:
+      OSAC_API_MODE: mock
+      dashboard_recent_activities:
+        allowed_sources:
+          - Client-side derivation from GET /api/fulfillment/v1/compute_instances (buildRecentActivities)
+          - BFF mock GET /api/events/v1/events (static paginated JSON; not fulfillment-shaped stream)
+    dev:
+      OSAC_API_MODE: dev
+      dashboard_recent_activities:
+        required_api: GET /api/events/v1/events
+        upstream: fulfillment-service osac.public.v1.Events.Watch via gRPC-Gateway
+        bff_behavior: >
+          Proxy /api/events/v1/* to the fulfillment REST gateway with the same Authorization
+          Bearer passthrough used for /api/fulfillment/v1/*. Do not serve the mock static JSON
+          array for this path in dev mode.
+        client_behavior: >
+          Open the long-lived watch (SSE or chunked JSON per gateway deployment); apply optional
+          CEL filter query param; buffer the latest N events for the sidebar; reconnect with
+          exponential backoff. Combine with GET /api/fulfillment/v1/compute_instances only for
+          hydration or reconciliation when event.relatedObjectRefs require fresh object state —
+          not as the sole source of the activity timeline in dev mode.
+        auth: Bearer JWT required (same as other protected fulfillment routes)
+
+  # ---------------------------------------------------------------------------
+  # Non-mock (“real fulfillment”) integration target — mock mode stays as-is
+  # ---------------------------------------------------------------------------
+  osac_real_api_integration:
+    purpose: >
+      When OSAC runs against real fulfillment-service (typically OSAC_API_MODE=dev with
+      FULFILLMENT_API_URL and a working IdP), the SPA + BFF MUST satisfy this contract.
+      **OSAC_API_MODE=mock is unchanged:** BFF continues to serve fixtures; the SPA MAY keep
+      using libs/api-contracts DEMO_*, VM_TEMPLATES, buildRecentActivities(vm list), and
+      synthetic utilization charts exactly as today. Real-mode behavior MUST be gated
+      (env, build flag, or runtime branch) so mock demos do not regress.
+    mock_mode_invariant: >
+      No obligation to wire OIDC, proxy non-fulfillment paths, or remove DEMO_* / VM_TEMPLATES
+      when mock mode is active. Tests and local demos default to mock unless explicitly
+      configured for dev/real.
+
+    authentication_oidc:
+      description: Wire capabilities discovery to interactive login and Bearer tokens.
+      steps:
+        - >-
+          On InstitutionalSignIn (or app bootstrap before protected routes), call
+          GET /api/fulfillment/v1/capabilities **without** Authorization; parse authn.trustedTokenIssuers.
+        - >-
+          Run OAuth 2.0 Authorization Code flow with **PKCE** (or org-mandated equivalent)
+          against the chosen issuer; obtain access_token (JWT) and optional refresh_token.
+        - >-
+          Store tokens per browser security guidance (memory + refresh, or httpOnly cookies if BFF participates).
+        - >-
+          Attach Authorization: Bearer with the access_token JWT on every SPA→BFF request that
+          forwards to fulfillment; BFF passes the header through unchanged for proxied paths.
+        - Document logout (revoke or drop session) and token refresh failure UX.
+
+    bff_proxy_matrix_dev:
+      description: When OSAC_API_MODE=dev, forward these prefixes to the fulfillment REST gateway (FULFILLMENT_API_URL).
+      paths:
+        - prefix: /api/fulfillment/v1
+          note: Existing public fulfillment CRUD + capabilities (capabilities may be called without Bearer from browser if same-origin allows).
+        - prefix: /api/events/v1
+          note: Events.Watch — **stream**; BFF MUST NOT replace with mock JSON; forward streaming body and status headers.
+        - prefix: /api/osac/public/v1
+          note: Console.GetAccess and related public paths; forward Authorization.
+      implementation_notes:
+        - >-
+          Avoid `reply.send(await res.json())` for all proxied responses: non-JSON bodies
+          (e.g. kubeconfig HttpBody) and chunked streams require piping or streaming passthrough.
+        - Register dev proxy routes **before** or **instead of** mock handlers for the same paths.
+
+    client_and_hooks_expansion:
+      description: apps/app-frontend MUST extend api/client.ts (or generated SDK) and hooks.ts (TanStack Query).
+      minimum_operations:
+        - method: GET
+          path: /api/fulfillment/v1/capabilities
+          auth: false
+        - method: GET
+          path: /api/fulfillment/v1/organizations
+          hooks: [listOrganizations, useOrganizations]
+        - method: GET
+          path: /api/fulfillment/v1/organizations/{id}
+          hooks: [getOrganization, useOrganization]
+        - method: GET
+          path: /api/fulfillment/v1/users
+          hooks: [listUsers, useUsers]
+        - method: GET
+          path: /api/fulfillment/v1/virtual_networks
+          hooks: [listVirtualNetworks, useVirtualNetworks]
+        - method: GET
+          path: /api/fulfillment/v1/subnets
+          hooks: [listSubnets, useSubnets]
+        - method: GET
+          path: /api/fulfillment/v1/security_groups
+          hooks: [listSecurityGroups, useSecurityGroups]
+        - method: GET
+          path: /api/events/v1/events
+          note: Stream consumer — useEventStream / useEventsWatch; not plain fetch().json()
+        - method: GET
+          path: /api/fulfillment/v1/compute_instance_templates
+          note: Wizard + catalog alignment with fulfillment VM templates
+        - method: GET
+          path: /api/fulfillment/v1/compute_instance_templates/{id}
+      existing_operations_to_fix:
+        - >-
+          POST /api/fulfillment/v1/compute_instances MUST send body shape
+          `{ "object": { ... } }` per grpc-gateway **body: "object"** — not a bare instance.
+        - >-
+          PATCH bodies MUST match fulfillment implicit FieldMask semantics (present fields only).
+        - Wire GET/PATCH/DELETE compute instance and GET cluster_template by id where UI needs them.
+
+    replace_mock_data_sources:
+      description: In dev/real mode, stop sourcing these screens from libs/api-contracts fixtures.
+      mappings:
+        - screen_or_component: CreateVmWizard / TemplateStep / ReviewStep
+          remove: VM_TEMPLATES from @osac/api-contracts for template pickers when real mode
+          use: GET /api/fulfillment/v1/cluster_templates and/or compute_instance_templates (+ GET by id)
+        - screen_or_component: CatalogPage / provider global templates
+          remove: Relying on VM_TEMPLATES fallback
+          use: useClusterTemplates + optional compute_instance_templates
+        - screen_or_component: ProviderTenantOrgsPage / ProviderAdminDashboard org counts
+          remove: DEMO_ORGANIZATIONS
+          use: useOrganizations (GET /api/fulfillment/v1/organizations)
+        - screen_or_component: AdminUsersPage
+          remove: NORTHSTAR_USERS, EVERGREEN_USERS
+          use: useUsers with CEL filter or org scope per RBAC
+        - screen_or_component: AdminNetworksPage / topology
+          remove: VM-only inference where product expects VN/subnet APIs
+          use: useVirtualNetworks, useSubnets, useSecurityGroups + compute_instances for VM placement
+        - screen_or_component: DashboardVmUtilizationSection sidebar + RecentActivitiesPage
+          remove: buildRecentActivities(vm list) as sole source in dev mode
+          use: events stream per osac_bff_runtime_modes.dev
+        - screen_or_component: DashboardPage stat cards
+          remove: DEMO_VM_POWER_COUNTS as primary source in dev mode
+          use: Aggregate counts from GET compute_instances (fulfillment state) or future summary API
+        - screen_or_component: DashboardQuotaSection / AdminQuotaPage
+          remove: DEMO_QUOTA as “real” data in dev mode
+          use: SPEC_GAP — no standard public quota resource in analyzed fulfillment surface;
+            document empty/placeholder UI, product-approved private proxy via BFF only, or wait for upstream quota API
+
+    utilization_metrics_charts:
+      status: spec_gap_accepted
+      description: >
+        DashboardUtilizationSection CPU/memory/GPU/storage line charts have no fulfillment
+        public time-series metrics API in the analyzed contract. Until product adds one:
+      options:
+        - id: A
+          label: Explicit prototype gap
+          detail: Keep deterministic/synthetic series in **both** modes OR show “demo data” in real mode with PatternFly inline alert.
+        - id: B
+          label: New fulfillment API
+          detail: Add tenant metrics endpoint; update this spec with path, query (window, step), and schema.
+        - id: C
+          label: External observability
+          detail: BFF aggregates Prometheus/Grafana or similar; document separate OpenAPI for /api/osac/metrics/* if used.
+
+    typescript_models:
+      description: Align TypeScript with fulfillment proto-JSON, not hand-written demo shapes.
+      policy:
+        - >-
+          **Preferred:** Consume OpenAPI published by fulfillment-service (CI artifact or repo)
+          and codegen into libs/api-contracts or libs/fulfillment-sdk (openapi-typescript, hey-api/openapi-ts, etc.).
+        - >-
+          **Minimum:** Runtime validators (Zod) generated from the same OpenAPI; map proto-JSON
+          to view models in a thin adapter layer.
+        - >-
+          Keep existing demo types (ComputeInstance, ClusterTemplate, PageOfT) for **mock mode only**
+          or as aliases of generated types after proving equivalence.
+      fields_to_reconcile:
+        - Nested metadata, spec, status per proto; enum PROTO_JSON strings; google.protobuf.Any in template parameters.
+
+    rbac_tenant_scoping:
+      description: Tenant isolation comes from fulfillment authz on the JWT; SPA does not invent parallel tenant headers unless product mandates.
+      notes:
+        - Document which JWT claims map to tenant/org for support and debugging.
+        - Provider-admin views use broader list filters; fulfillment enforces scope.
+
   open_pull_requests_snapshot:
     fetched_at: '2026-04-17'
     note: >
@@ -91,9 +271,14 @@ context:
       - name: VmTemplateCatalog
         description: Gallery of VM/cluster templates by scope.
         data_requirements:
-          - clusterTemplate.id
-          - clusterTemplate.title
-          - clusterTemplate.description
+          fields:
+            - clusterTemplate.id
+            - clusterTemplate.title
+            - clusterTemplate.description
+          mock_mode:
+            - VM_TEMPLATES / catalog fixtures from api-contracts acceptable
+          dev_mode:
+            - GET /api/fulfillment/v1/cluster_templates (+ GET by id); optional compute_instance_templates
       - name: CreateVirtualMachineWizard
         description: >-
           New / template / clone paths inside Modal + PatternFly Wizard; step validation and draft
@@ -129,12 +314,46 @@ context:
           - event.type
           - event.timestamp
           - event.relatedObjectRefs
+      - name: DashboardVmUtilizationSection
+        description: >
+          Tenant user dashboard — utilization line charts (demo/synthetic series in prototype) plus
+          "Recent activities" sidebar preview and link to full-page feed.
+        data_requirements:
+          mock_mode:
+            - GET /api/fulfillment/v1/compute_instances (optional; may seed buildRecentActivities sidebar)
+            - Optional GET /api/events/v1/events (BFF mock JSON)
+          dev_mode:
+            - GET /api/events/v1/events (fulfillment Events.Watch; required for real activity sidebar)
+            - GET /api/fulfillment/v1/compute_instances (optional; stat cards / chart seed / hydration only)
       - name: TenantAdministration_NetworkTopology
         description: VN / subnet / VM linkage for topology handoff.
         data_requirements:
           - virtualNetwork.id
           - subnet.id
           - computeInstance.id + subnet binding
+      - name: AdminUsersPage
+        description: Tenant admin user directory.
+        data_requirements:
+          mock_mode:
+            - NORTHSTAR_USERS / EVERGREEN_USERS fixtures in api-contracts (unchanged)
+          dev_mode:
+            - GET /api/fulfillment/v1/users (CEL filter / RBAC scope per fulfillment)
+      - name: ProviderTenantOrganizationsPage
+        description: Provider-scoped organization list and dashboards that count orgs.
+        data_requirements:
+          mock_mode:
+            - DEMO_ORGANIZATIONS (unchanged)
+          dev_mode:
+            - GET /api/fulfillment/v1/organizations (+ GET by id where drill-down exists)
+      - name: AdminNetworksPage
+        description: Virtual networks, subnets, security groups for tenant admin.
+        data_requirements:
+          mock_mode:
+            - BFF mock list endpoints + VM spec inference where applicable (unchanged)
+          dev_mode:
+            - GET /api/fulfillment/v1/virtual_networks
+            - GET /api/fulfillment/v1/subnets
+            - GET /api/fulfillment/v1/security_groups
 
   flows:
     - name: institutional-sign-in
@@ -172,6 +391,18 @@ context:
       steps:
         - GET /api/events/v1/events?filter= (long-lived; reconnect with backoff)
         - Correlate with GETs on affected objects
+    - name: tenant-user-dashboard-activities
+      description: >
+        Dashboard utilization section — "Recent activities" sidebar (and preview list) for tenant user home.
+      runtime_modes:
+        dev:
+          steps:
+            - GET /api/events/v1/events?filter= (fulfillment stream; BFF proxy in dev mode)
+            - Map Event payload fields to sidebar cards (type, time, message, severity as available)
+            - Optional GET /api/fulfillment/v1/compute_instances/{id} when correlating refs
+        mock:
+          steps:
+            - May use buildRecentActivities(compute instances) and/or BFF mock events endpoint
     - name: tenant-administration
       description: Tenant-scoped networking and org metadata.
       steps:
@@ -704,7 +935,9 @@ apis:
           description: Unknown resource
 
   - name: events_watch
-    description: Long-lived event stream for activity feed (client must tolerate gaps).
+    description: >
+      Long-lived event stream for activity feed (client must tolerate gaps). OSAC demo: required
+      source for tenant dashboard "Recent activities" in dev mode — see context.osac_bff_runtime_modes.
     endpoint: /api/events/v1/events
     method: GET
     auth:
