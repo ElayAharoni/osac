@@ -89,8 +89,15 @@ context:
       No obligation to wire OIDC, proxy non-fulfillment paths, or remove DEMO_* / VM_TEMPLATES
       when mock mode is active. Tests and local demos default to mock unless explicitly
       configured for dev/real.
+    integration_scope:
+      active_modes: [dev]
+      disabled_modes: [mock]
+      enforcement: >
+        Requirements below are mandatory only when OSAC_API_MODE=dev. In OSAC_API_MODE=mock,
+        preserve current fixture-first behavior and session personas.
 
     authentication_oidc:
+      active_modes: [dev]
       description: Wire capabilities discovery to interactive login and Bearer tokens.
       steps:
         - >-
@@ -107,6 +114,7 @@ context:
         - Document logout (revoke or drop session) and token refresh failure UX.
 
     bff_proxy_matrix_dev:
+      active_modes: [dev]
       description: When OSAC_API_MODE=dev, forward these prefixes to the fulfillment REST gateway (FULFILLMENT_API_URL).
       paths:
         - prefix: /api/fulfillment/v1
@@ -120,8 +128,51 @@ context:
           Avoid `reply.send(await res.json())` for all proxied responses: non-JSON bodies
           (e.g. kubeconfig HttpBody) and chunked streams require piping or streaming passthrough.
         - Register dev proxy routes **before** or **instead of** mock handlers for the same paths.
+        - Do not proxy these paths in OSAC_API_MODE=mock.
+
+    jwt_claims_and_authorino_alignment:
+      active_modes: [dev]
+      description: Ensure JWT claims, IdP setup, and Authorino policy produce expected x-subject.
+      requirements:
+        - >-
+          Keycloak (or chosen OIDC provider) MUST issue JWTs with claims required by Authorino
+          policy (`username` and tenant-bearing `groups`, or documented mapped equivalents).
+        - >-
+          `authn.trustedTokenIssuers[].issuerUrl` served by capabilities MUST match the JWT
+          issuer configured in Authorino AuthConfig.
+        - >-
+          In successful authorized requests, Authorino MUST produce x-subject with
+          `{ user, tenants }`; JWT users map tenants from groups, and admin identities map
+          to universal tenant scope (`["*"]`) per policy.
+      mock_mode_behavior: >
+        In OSAC_API_MODE=mock, no real IdP/JWT claim validation is required and x-subject
+        verification is not part of acceptance.
+
+    role_model_alignment:
+      active_modes: [dev]
+      description: Align SPA persona model with fulfillment authorization semantics.
+      options:
+        - id: A
+          label: UI-only tenantAdmin vs tenantUser split
+          detail: >
+            Keep both personas mapped to backend "client" permissions; differences remain
+            UX/navigation-level only.
+        - id: B
+          label: Backend-distinct tenantAdmin and tenantUser
+          detail: >
+            Extend Authorino/service policy so tenantAdmin and tenantUser have distinct
+            backend-authorized operations.
+        - id: C
+          label: Backend-driven role bindings
+          detail: >
+            Drive SPA authorization from fulfillment Roles/RoleBindings APIs and treat welcome
+            personas as entry hints, not the source of truth.
+      constraints:
+        - Selected option MUST be documented in README/runbook before enabling dev mode by default.
+        - OSAC_API_MODE=mock continues using local demo personas regardless of selected dev option.
 
     client_and_hooks_expansion:
+      active_modes: [dev]
       description: apps/app-frontend MUST extend api/client.ts (or generated SDK) and hooks.ts (TanStack Query).
       minimum_operations:
         - method: GET

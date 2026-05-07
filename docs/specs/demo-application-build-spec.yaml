@@ -125,7 +125,8 @@ spec_hierarchy:
       capabilities/events/console). Cross-check UI data_requirements sections in that file.
       In OSAC_API_MODE=dev, proxy GET /api/events/v1/events to fulfillment for dashboard and
       full-page activities per context.osac_bff_runtime_modes in backend-fulfillment.yaml.
-      **Non-mock integration target** (OIDC + capabilities, full proxy matrix, client/hooks for
+      **Non-mock integration target** (OIDC + capabilities, full proxy matrix, JWT claims +
+      Authorino alignment for x-subject, role-model alignment strategy, client/hooks for
       orgs/users/networks/events, replace VM_TEMPLATES/DEMO_* where APIs exist, TS alignment,
       utilization chart gap policy) is **context.osac_real_api_integration** in the same file;
       **mock mode behavior MUST NOT change** per that section’s mock_mode_invariant.
@@ -211,6 +212,10 @@ implementation_phases:
         TanStack hooks for organizations, users, virtual_networks, subnets, security_groups, events
         stream, compute_instance_templates as needed; replace VM_TEMPLATES / DEMO_* per
         replace_mock_data_sources when not in mock mode; honor utilization_metrics_charts policy.
+      - >-
+        In OSAC_API_MODE=dev, implement jwt_claims_and_authorino_alignment and role_model_alignment
+        from context.osac_real_api_integration. In OSAC_API_MODE=mock, keep session personas and
+        fixture-backed behavior unchanged.
       - Map routing and feature modules to FLOW-INDEX flows[].id (welcome, auth, shell, dashboards,
         catalog, wizard, VMs, activities, admin, console demo).
       - Respect cross_flow_entry_points and canonical_step_ids for navigation and deep links.
@@ -255,8 +260,9 @@ acceptance_checklist:
   - HTTP behavior matches backend-fulfillment.yaml for public operations the UI uses; mocks documented for gaps/private.
   - >-
     When OSAC_API_MODE=dev, integration matches **context.osac_real_api_integration** (proxy matrix,
-    OIDC/capabilities, hooks, POST `{ object }`, events stream, DEMO_* / VM_TEMPLATES replacement,
-    TS model alignment, utilization chart gap choice). When OSAC_API_MODE=mock, behavior stays on
+    OIDC/capabilities, hooks, POST `{ object }`, events stream, JWT claims + Authorino x-subject
+    alignment, role-model alignment strategy, DEMO_* / VM_TEMPLATES replacement, TS model alignment,
+    utilization chart gap choice). When OSAC_API_MODE=mock, behavior stays on
     fixtures and existing demo types per mock_mode_invariant.
   - Browser never calls private fulfillment REST; private only via BFF (real or mocked).
   - pnpm test (Vitest) and Cypress E2E pass in CI.

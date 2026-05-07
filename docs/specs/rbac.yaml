@@ -240,3 +240,12 @@ ai-hints:
     - tenantAdmin inherits all tenantUser permissions
     - providerAdmin does not manage individual virtual machines in this demo baseline
     - vm lifecycle actions must remain tenant-scoped and must not cross tenant boundaries
+  integration_modes:
+    dev: >-
+      With OSAC_API_MODE=dev, this manifest must be reconciled with
+      backend-fulfillment.yaml context.osac_real_api_integration.role_model_alignment and
+      jwt_claims_and_authorino_alignment. SPA personas are valid only if they map to
+      backend-enforced permissions and tenant scope from JWT/Authorino.
+    mock: >-
+      With OSAC_API_MODE=mock, this manifest continues to drive local demo navigation and
+      guards without requiring real IdP tokens, Authorino checks, or fulfillment RoleBindings.
