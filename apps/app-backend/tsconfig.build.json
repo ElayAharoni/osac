@@ -4,5 +4,6 @@
     "allowImportingTsExtensions": false,
     "noEmit": false,
     "outDir": "dist"
-  }
+  },
+  "exclude": ["src/**/*.test.ts"]
 }

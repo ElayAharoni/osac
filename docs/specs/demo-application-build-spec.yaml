@@ -182,8 +182,11 @@ implementation_phases:
       - Serve production SPA from app-backend in prod mode; expose /health (and /ready if used).
       - Image build copies prebuilt assets from apps/app-frontend into the BFF app artifact so **one container** serves API + static UI.
     gates:
-      - Vitest unit + HTTP integration tests pass with inject() or supertest.
-      - BFF starts with mock-only and with proxy to a test double URL.
+      - >-
+        Vitest integration tests pass for apps/app-backend (`pnpm --filter @osac/app-backend test`):
+        see **context.osac_real_api_integration.bff_test_harness** in backend-fulfillment.yaml
+        (bff-contract.mock.test.ts, bff-contract.proxy.test.ts, buildApp in app.ts).
+      - BFF starts with mock-only and with proxy to a test double URL (manual or compose).
 
   - id: phase-04-ui-library
     name: Shared PatternFly 6 components

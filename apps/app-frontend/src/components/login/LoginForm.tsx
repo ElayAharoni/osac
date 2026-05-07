@@ -25,6 +25,7 @@ interface LoginFormProps {
   onSubmit: (email: string, password: string) => void
   onChooseAnother: () => void
   trustedIssuers?: string[]
+  submitError?: string | null
 }
 
 export function LoginForm({
@@ -36,6 +37,7 @@ export function LoginForm({
   onSubmit,
   onChooseAnother,
   trustedIssuers,
+  submitError,
 }: LoginFormProps) {
   const [email, setEmail] = useState(defaultEmail)
   const [password, setPassword] = useState('')
@@ -58,6 +60,7 @@ export function LoginForm({
           Sign in with any of the configured trusted issuers for this environment.
         </Alert>
       )}
+      {submitError ? <Alert variant="danger" isInline title={submitError} /> : null}
 
       <FormGroup label={emailLabel} fieldId="login-email" isRequired>
         <TextInput

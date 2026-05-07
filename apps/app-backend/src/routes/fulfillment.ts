@@ -20,6 +20,7 @@ import type { FastifyInstance } from 'fastify'
 import { VM_TEMPLATES, DEMO_ORGANIZATIONS } from '@osac/api-contracts'
 import type { ComputeInstance } from '@osac/api-contracts'
 import { vmStore } from '../mock-vm-store.js'
+import { proxyToUpstream } from './upstreamProxy.js'
 
 interface RouteConfig {
   apiMode: string
@@ -31,20 +32,9 @@ export async function registerFulfillmentRoutes(app: FastifyInstance, config: Ro
   const prefix = '/api/fulfillment/v1'
 
   if (apiMode === 'dev' && fulfillmentApiUrl) {
-    // In proxy mode, forward requests to upstream
+    // In dev mode, forward requests to upstream (streaming-safe passthrough).
     app.all(`${prefix}/*`, async (req, reply) => {
-      const upstreamUrl = `${fulfillmentApiUrl}${req.url}`
-      const headers: Record<string, string> = {}
-      if (req.headers.authorization) {
-        headers['Authorization'] = req.headers.authorization
-      }
-      const res = await fetch(upstreamUrl, {
-        method: req.method,
-        headers,
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
-      })
-      const body = await res.json()
-      reply.status(res.status).send(body)
+      await proxyToUpstream(req, reply, fulfillmentApiUrl)
     })
     return
   }

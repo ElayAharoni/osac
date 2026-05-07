@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { DemoShellRole, DemoTenantId } from '@osac/api-contracts'
 import { demoLoginEmailForRole } from '@osac/api-contracts'
+import { clearAccessToken } from '../api/authToken'
 
 // ---------------------------------------------------------------------------
 // Query-param helpers (run once at startup)
@@ -46,7 +47,7 @@ interface SessionContextValue {
   // Actions
   selectProviderAdmin: () => void
   selectTenantPersona: (tenant: DemoTenantId, role: DemoShellRole) => void
-  loginSuccess: () => void
+  loginSuccess: (email: string, password: string) => void
   logout: () => void
   setIsDarkTheme: (dark: boolean) => void
   openTopologyDetailRequest: (vmId: string) => void
@@ -125,7 +126,7 @@ export function SessionProvider({
     roleRef.current = r
   }, [])
 
-  const loginSuccess = useCallback(() => {
+  const loginSuccess = useCallback((_email: string, _password: string) => {
     setIsLoginLoading(true)
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
@@ -138,6 +139,7 @@ export function SessionProvider({
 
   const logout = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
+    clearAccessToken()
     setIsLoggedIn(false)
     setIsLoginLoading(false)
     setSelectedTenant(null)

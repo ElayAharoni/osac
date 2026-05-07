@@ -3,13 +3,19 @@
  * Vite dev server proxies /api → backend:3001.
  * In production the BFF serves both the SPA and the API.
  */
-import type { ComputeInstance, ClusterTemplate, PageOfT } from '@osac/api-contracts'
+import type {
+  ComputeInstance,
+  ClusterTemplate,
+  FulfillmentCapabilities,
+  PageOfT,
+} from '@osac/api-contracts'
+import { buildAuthHeaders } from './authToken'
 
 const BASE = '/api/fulfillment/v1'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', ...init?.headers }),
     ...init,
   })
   if (!res.ok) {
@@ -17,6 +23,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status}: ${body || res.statusText}`)
   }
   return res.json() as Promise<T>
+}
+
+export function getFulfillmentCapabilities(): Promise<FulfillmentCapabilities> {
+  return request<FulfillmentCapabilities>('/capabilities')
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +57,7 @@ export function getComputeInstance(id: string): Promise<ComputeInstance> {
 export async function createComputeInstance(vm: Partial<ComputeInstance>): Promise<ComputeInstance> {
   const res = await fetch(`${BASE}/compute_instances`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ object: vm }),
   })
   if (!res.ok) {

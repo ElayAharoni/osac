@@ -1,8 +1,10 @@
 /** Mock event feed — GET /api/events/v1/events */
 import type { FastifyInstance } from 'fastify'
+import { proxyToUpstream } from './upstreamProxy.js'
 
 interface RouteConfig {
   apiMode: string
+  fulfillmentApiUrl?: string
 }
 
 const MOCK_EVENTS = Array.from({ length: 50 }, (_, i) => ({
@@ -13,7 +15,16 @@ const MOCK_EVENTS = Array.from({ length: 50 }, (_, i) => ({
   severity: ['info', 'success', 'warning', 'info'][i % 4],
 }))
 
-export async function registerEventsRoutes(app: FastifyInstance, _config: RouteConfig) {
+export async function registerEventsRoutes(app: FastifyInstance, config: RouteConfig) {
+  const { apiMode, fulfillmentApiUrl } = config
+
+  if (apiMode === 'dev' && fulfillmentApiUrl) {
+    app.all('/api/events/v1/*', async (req, reply) => {
+      await proxyToUpstream(req, reply, fulfillmentApiUrl)
+    })
+    return
+  }
+
   app.get('/api/events/v1/events', async (req) => {
     const query = req.query as { limit?: string; offset?: string }
     const limit = parseInt(query.limit ?? '20', 10)

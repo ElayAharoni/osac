@@ -10,6 +10,7 @@ OSAC is a fullstack demo application for an OpenShift-based VM-as-a-Service plat
 - [Prerequisites](#prerequisites)
 - [Quick start (mock mode)](#quick-start-mock-mode)
 - [Running modes explained](#running-modes-explained)
+- [Authorization (dev mode and fulfillment RBAC)](#authorization-dev-mode-and-fulfillment-rbac)
 - [Demo personas and entry points](#demo-personas-and-entry-points)
 - [What is implemented](#what-is-implemented)
 - [What needs real integration or further testing](#what-needs-real-integration-or-further-testing)
@@ -43,10 +44,12 @@ osac/
 
 ## Prerequisites
 
+
 | Tool    | Minimum version |
 | ------- | --------------- |
 | Node.js | 20              |
 | pnpm    | 9               |
+
 
 Install pnpm if you don't have it:
 
@@ -101,6 +104,7 @@ OSAC_API_MODE=mock pnpm dev:backend
 
 Mocked endpoints:
 
+
 | Endpoint                                           | Description                                   |
 | -------------------------------------------------- | --------------------------------------------- |
 | `GET /api/fulfillment/v1/compute_instances`        | List VMs (Northstar + Bluestone fixture data) |
@@ -116,6 +120,7 @@ Mocked endpoints:
 | `GET /health`                                      | Health probe                                  |
 | `GET /ready`                                       | Readiness probe                               |
 
+
 ### Dev mode (real upstream API)
 
 Set `OSAC_API_MODE=dev` and `FULFILLMENT_API_URL` so the BFF can forward browser traffic to the fulfillment REST gateway.
@@ -126,13 +131,14 @@ FULFILLMENT_API_URL=https://fulfillment.your-env.example.com \
 pnpm dev:backend
 ```
 
-**Today (minimal integration):** the BFF forwards `/api/fulfillment/v1/*` and passes through the `Authorization` header. Much of the SPA still reads `DEMO_*` fixtures and `VM_TEMPLATES` from `libs/api-contracts` even in dev mode.
+**Today:** in dev mode the BFF proxies `**/api/fulfillment/v1/*`**, `**/api/events/v1/***`, and `**/api/osac/public/v1/***` to `FULFILLMENT_API_URL` with streaming-safe passthrough and forwards inbound `Authorization` unchanged. See [Authorization (dev mode and fulfillment RBAC)](#authorization-dev-mode-and-fulfillment-rbac). Much of the SPA still reads `DEMO_*` fixtures and `VM_TEMPLATES` from `libs/api-contracts` even in dev mode.
 
-**Spec target — non-mock flow:** `docs/specs/backend-fulfillment.yaml` → `context.osac_real_api_integration` — expand the BFF proxy to `/api/events/v1/*` and `/api/osac/public/v1/*` (streaming-safe), wire OIDC from `GET /api/fulfillment/v1/capabilities`, extend the SPA client and TanStack hooks for organizations, users, networks, and events, replace mock-only data where fulfillment has resources, align TypeScript with published fulfillment OpenAPI (or codegen), and treat utilization charts as an explicit gap or product-owned metrics API. **Mock mode (`OSAC_API_MODE=mock`) stays unchanged.**
+**Spec target — non-mock flow:** `docs/specs/backend-fulfillment.yaml` → `context.osac_real_api_integration` — wire full **OIDC Authorization Code + PKCE** from `GET /api/fulfillment/v1/capabilities`, extend the SPA client and TanStack hooks for organizations, users, networks, and events, replace mock-only data where fulfillment has resources, align TypeScript with published fulfillment OpenAPI (or codegen), and treat utilization charts as an explicit gap or product-owned metrics API. **Mock mode (`OSAC_API_MODE=mock`) stays unchanged.**
 
-> **Note:** OIDC / Bearer acquisition in the SPA is still a gap vs that spec (see [What needs real integration](#what-needs-real-integration-or-further-testing)).
+> **Note:** Interactive OIDC in the SPA is still incomplete vs that spec; dev mode can use a pasted JWT when capabilities list trusted issuers (see [Authorization](#authorization-dev-mode-and-fulfillment-rbac) and [What needs real integration](#what-needs-real-integration-or-further-testing)).
 
-### Environment variables reference (backend)
+### Environment variables reference 
+
 
 | Variable              | Default   | Description                                                                  |
 | --------------------- | --------- | ---------------------------------------------------------------------------- |
@@ -140,10 +146,85 @@ pnpm dev:backend
 | `HOST`                | `0.0.0.0` | BFF listen host                                                              |
 | `LOG_LEVEL`           | `info`    | Fastify log level (`trace` / `debug` / `info` / `warn` / `error`)            |
 | `OSAC_API_MODE`       | `mock`    | `mock` — built-in fixtures; `dev` — proxy to upstream                        |
-| `FULFILLMENT_API_URL` | _(unset)_ | Required when `OSAC_API_MODE=dev`. Base URL of the upstream fulfillment API. |
-| `NODE_ENV`            | _(unset)_ | Set to `production` in the container image                                   |
+| `FULFILLMENT_API_URL` | *(unset)* | Required when `OSAC_API_MODE=dev`. Base URL of the upstream fulfillment API. |
+| `NODE_ENV`            | *(unset)* | Set to `production` in the container image                                   |
+
 
 Copy `apps/app-backend/.env.example` to `apps/app-backend/.env` and adjust values for your environment.
+
+---
+
+## Authorization (dev mode and fulfillment RBAC)
+
+In **mock mode** (`OSAC_API_MODE=mock`), the BFF serves fixtures. The SPA does not need a real identity provider or `Authorization` header for those routes.
+
+In **dev mode** (`OSAC_API_MODE=dev` with `FULFILLMENT_API_URL`), the SPA should call the BFF with `Authorization: Bearer <access_token>` on requests that proxy to fulfillment. The BFF forwards the request (including that header) to the upstream fulfillment REST gateway. Between the browser and fulfillment-service, the cluster typically runs an **API gateway + Authorino**: Authorino validates the JWT, runs policy (for example OPA: admin vs client and allowed operations), maps **JWT `groups`** (or equivalent claims) to **tenant scope**, and injects `**x-subject`** (`user` + `tenants`) for fulfillment-service. The service then enforces tenancy and resource-level access. The browser never receives `x-subject`; it is an edge-to-service contract.
+
+**Current SPA behavior (dev path):** the sign-in page loads `GET /api/fulfillment/v1/capabilities`. If `authn.trustedTokenIssuers` is non-empty, the UI treats dev sign-in as **paste a JWT access token** (stored for subsequent API calls). Full **OIDC Authorization Code + PKCE** against that issuer is the spec target; see `docs/specs/backend-fulfillment.yaml` → `context.osac_real_api_integration`.
+
+### End-to-end sequence (SPA → Authorino → fulfillment-service)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant SPA as OSAC SPA
+    participant IdP as OIDC IdP<br/>(e.g. Keycloak)
+    participant BFF as OSAC BFF
+    participant GW as API gateway<br/>(e.g. Envoy)
+    participant Auth as Authorino<br/>(JWT + OPA)
+    participant FS as fulfillment-service
+
+    U->>SPA: Choose persona / navigate
+    SPA->>IdP: Authorization Code + PKCE<br/>(issuer from capabilities)
+    IdP-->>SPA: access_token (JWT)<br/>claims: sub, username, groups, …
+
+    SPA->>BFF: HTTPS /api/...<br/>Authorization: Bearer JWT
+    Note over BFF: Dev: proxy passthrough<br/>Mock: fixtures only
+
+    BFF->>GW: Forward request<br/>Authorization: Bearer JWT
+    GW->>Auth: ext_authz / auth check<br/>(method + identity)
+
+    Auth->>Auth: Verify JWT (issuer, sig, exp)
+    Auth->>Auth: OPA: admin vs client,<br/>allowed RPC/method list
+    Auth->>Auth: Derive tenants from JWT groups<br/>(or * for admin)
+
+    alt Authorized
+        Auth-->>GW: OK + inject headers<br/>x-subject: {"user","tenants"}
+        GW->>FS: Forward request + x-subject<br/>(+ Bearer per deployment)
+        FS->>FS: Read subject from context<br/>tenant scope + resource checks
+        FS-->>GW: JSON / stream response
+        GW-->>BFF: Response
+        BFF-->>SPA: Response
+        SPA-->>U: UI update
+    else Denied (Authorino)
+        Auth-->>GW: 403 Forbidden
+        GW-->>BFF: 403
+        BFF-->>SPA: 403
+        SPA-->>U: Error / re-auth
+    end
+```
+
+
+
+### Where `x-subject` fits (edge vs application)
+
+```mermaid
+flowchart LR
+  subgraph edge["Edge (Authorino)"]
+    JWT[JWT Bearer]
+    OPA[OPA policy<br/>admin / client / allowlist]
+    XS[x-subject header<br/>user + tenants from groups]
+    JWT --> OPA --> XS
+  end
+  subgraph app["fulfillment-service"]
+    CTX[Subject in request context]
+    TEN[Tenancy + resource RBAC]
+    JWT -.->|after allow| XS --> CTX --> TEN
+  end
+```
+
+
 
 ---
 
@@ -151,13 +232,15 @@ Copy `apps/app-backend/.env.example` to `apps/app-backend/.env` and adjust value
 
 The welcome page (`/`) is a **booth operator entry screen**, not a customer-facing login. It uses **three role columns** (Provider Admin, Tenant Admin, Tenant User). Under **Tenant Admin** and **Tenant User**, pick **Northstar Bank** or **Bluestone Financial** to set `tenantId` + role, then continue to sign-in. **Provider Admin** uses **Enter** (Vertexa / cross-tenant context).
 
-| Entry surface                    | Role            | What they see after login                                                            |
-| -------------------------------- | --------------- | ------------------------------------------------------------------------------------ |
-| **Provider Admin → Enter**       | `providerAdmin` | Cross-tenant dashboard, organizations, global templates, infrastructure topology      |
-| **Tenant User → org button**     | `tenantUser`    | VM dashboard, My VMs, template catalog, recent activities                            |
-| **Tenant Admin → org button**    | `tenantAdmin`   | Admin dashboard, users, quota, networks, template catalog                            |
 
-All paths navigate to **`/sign-in`** in the **same tab**. Sign-in is a **single institutional screen** (`InstitutionalSignInPage`): copy, trusted-issuer alert, and accents follow the **selected tenant** via `components/login/institutionalBranding.ts` — there are no separate routed pages per bank.
+| Entry surface                 | Role            | What they see after login                                                        |
+| ----------------------------- | --------------- | -------------------------------------------------------------------------------- |
+| **Provider Admin → Enter**    | `providerAdmin` | Cross-tenant dashboard, organizations, global templates, infrastructure topology |
+| **Tenant User → org button**  | `tenantUser`    | VM dashboard, My VMs, template catalog, recent activities                        |
+| **Tenant Admin → org button** | `tenantAdmin`   | Admin dashboard, users, quota, networks, template catalog                        |
+
+
+All paths navigate to `**/sign-in`** in the **same tab**. Sign-in is a **single institutional screen** (`InstitutionalSignInPage`): copy, trusted-issuer alert, and accents follow the **selected tenant** via `components/login/institutionalBranding.ts` — there are no separate routed pages per bank.
 
 You can also deep-link directly to a persona by appending a query parameter (cold load):
 
@@ -176,64 +259,71 @@ http://localhost:5173/?osac-entry=evergreen-admin
 
 ### Frontend (React SPA)
 
-| Area                               | Status | Notes                                                                 |
-| ---------------------------------- | ------ | --------------------------------------------------------------------- |
-| Welcome / role selection page      | ✅     | Three role columns; org buttons for tenant admin/user; Provider Enter |
-| Institutional sign-in (`/sign-in`) | ✅     | One `InstitutionalSignInPage`; tenant-aware branding + `LoginForm`    |
-| Application shell                  | ✅     | Masthead, role-based sidebar nav, breadcrumbs, light/dark toggle      |
-| Tenant user dashboard              | ✅     | VM power-state stat cards, create VM                                 |
-| My VMs — card view                 | ✅     | Power filter, search, card grid                                     |
-| My VMs — table view                | ✅     | Compact sortable table                                              |
-| VM detail drawer                   | ✅     | Overview, Networking, Conditions tabs; power actions                |
-| Create VM wizard                   | ✅     | Modal wizard; steps under `components/vm/createVmWizard/`. POSTs to BFF. |
-| Template catalog                   | ✅     | Searchable gallery, detail drawer, launches wizard                  |
-| Recent activities feed             | ✅     | Mock: derived from VM list. **Dev (spec):** `GET /api/events/v1/events` — see `docs/specs/backend-fulfillment.yaml` |
-| Tenant admin dashboard             | ✅     | Summary stats, navigation tiles                                     |
-| Tenant admin — Users               | ✅     | Table of demo users                                                 |
-| Tenant admin — Quota control       | ✅     | Resource consumption visualization                                  |
-| Tenant admin — Networks            | ✅     | Network topology graph                                              |
-| Provider admin dashboard           | ✅     | Cross-tenant summary, navigation tiles                              |
-| Provider — Tenant organizations    | ✅     | Organization list                                                   |
-| Provider — Infrastructure topology | ✅     | Platform-wide VM topology                                           |
-| Provider — Global templates        | ✅     | Reuses template catalog (provisioning blocked for provider context) |
-| Multi-tenant data isolation        | ✅     | Each tenant tab sees its own VM set                                 |
-| Light / dark theme                 | ✅     | Per-tenant default, togglable in masthead                           |
-| RBAC — nav and route guards        | ✅     | Nav items and routes are role-gated                                 |
+
+| Area                               | Status | Notes                                                                                                               |
+| ---------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| Welcome / role selection page      | ✅      | Three role columns; org buttons for tenant admin/user; Provider Enter                                               |
+| Institutional sign-in (`/sign-in`) | ✅      | One `InstitutionalSignInPage`; tenant-aware branding + `LoginForm`                                                  |
+| Application shell                  | ✅      | Masthead, role-based sidebar nav, breadcrumbs, light/dark toggle                                                    |
+| Tenant user dashboard              | ✅      | VM power-state stat cards, create VM                                                                                |
+| My VMs — card view                 | ✅      | Power filter, search, card grid                                                                                     |
+| My VMs — table view                | ✅      | Compact sortable table                                                                                              |
+| VM detail drawer                   | ✅      | Overview, Networking, Conditions tabs; power actions                                                                |
+| Create VM wizard                   | ✅      | Modal wizard; steps under `components/vm/createVmWizard/`. POSTs to BFF.                                            |
+| Template catalog                   | ✅      | Searchable gallery, detail drawer, launches wizard                                                                  |
+| Recent activities feed             | ✅      | Mock: derived from VM list. **Dev (spec):** `GET /api/events/v1/events` — see `docs/specs/backend-fulfillment.yaml` |
+| Tenant admin dashboard             | ✅      | Summary stats, navigation tiles                                                                                     |
+| Tenant admin — Users               | ✅      | Table of demo users                                                                                                 |
+| Tenant admin — Quota control       | ✅      | Resource consumption visualization                                                                                  |
+| Tenant admin — Networks            | ✅      | Network topology graph                                                                                              |
+| Provider admin dashboard           | ✅      | Cross-tenant summary, navigation tiles                                                                              |
+| Provider — Tenant organizations    | ✅      | Organization list                                                                                                   |
+| Provider — Infrastructure topology | ✅      | Platform-wide VM topology                                                                                           |
+| Provider — Global templates        | ✅      | Reuses template catalog (provisioning blocked for provider context)                                                 |
+| Multi-tenant data isolation        | ✅      | Each tenant tab sees its own VM set                                                                                 |
+| Light / dark theme                 | ✅      | Per-tenant default, togglable in masthead                                                                           |
+| RBAC — nav and route guards        | ✅      | Nav items and routes are role-gated                                                                                 |
+
 
 ### Backend (Fastify BFF)
 
-| Area                      | Status | Notes                                                                |
-| ------------------------- | ------ | -------------------------------------------------------------------- |
-| Mock fulfillment routes   | ✅     | Full CRUD for VMs; read-only for templates, orgs, networks           |
-| Upstream proxy (dev mode) | ⚠️     | `/api/fulfillment/v1/*` today; **spec:** also `/api/events/v1/*`, `/api/osac/public/v1/*` (see `context.osac_real_api_integration`) |
-| Health / readiness probes | ✅     | `/health` and `/ready`                                               |
-| SPA static file serving   | ✅     | Serves `public/` in production; SPA fallback for client-side routing |
-| CORS                      | ✅     | Open in dev, disabled in production                                  |
-| Event stream endpoint     | ✅     | `/api/events/v1/events` — mock static JSON today; **dev (spec):** proxy to fulfillment Events watch |
-| Console access stub       | ✅     | `/api/osac/public/v1/console/*` — returns mock URLs                  |
+
+| Area                      | Status | Notes                                                                                                                                                               |
+| ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mock fulfillment routes   | ✅      | Full CRUD for VMs; read-only for templates, orgs, networks                                                                                                          |
+| Upstream proxy (dev mode) | ✅      | `/api/fulfillment/v1/*`, `/api/events/v1/*`, `/api/osac/public/v1/*` — streaming-safe passthrough; **spec:** remaining items in `context.osac_real_api_integration` |
+| Health / readiness probes | ✅      | `/health` and `/ready`                                                                                                                                              |
+| SPA static file serving   | ✅      | Serves `public/` in production; SPA fallback for client-side routing                                                                                                |
+| CORS                      | ✅      | Open in dev, disabled in production                                                                                                                                 |
+| Event stream endpoint     | ✅      | Mock: static JSON; **dev:** proxy `/api/events/v1/*` to fulfillment (stream passthrough)                                                                            |
+| Console access            | ✅      | Mock: stub URLs; **dev:** proxy `/api/osac/public/v1/*` to fulfillment                                                                                              |
+
 
 ### Shared libraries
 
+
 | Library                                                          | Status |
 | ---------------------------------------------------------------- | ------ |
-| `@osac/api-contracts` — TypeScript types                         | ✅     |
-| `@osac/api-contracts` — Mock data (VMs, templates, orgs, events) | ✅     |
-| `@osac/ui-components` — `LightDarkToggle`                        | ✅     |
-| `@osac/ui-components` — `VmStatusLabel`                          | ✅     |
-| `@osac/ui-components` — `PlaceholderPage`                        | ✅     |
-| `@osac/ui-components` — `NetworkTopologyPage`                    | ✅     |
+| `@osac/api-contracts` — TypeScript types                         | ✅      |
+| `@osac/api-contracts` — Mock data (VMs, templates, orgs, events) | ✅      |
+| `@osac/ui-components` — `LightDarkToggle`                        | ✅      |
+| `@osac/ui-components` — `VmStatusLabel`                          | ✅      |
+| `@osac/ui-components` — `PlaceholderPage`                        | ✅      |
+| `@osac/ui-components` — `NetworkTopologyPage`                    | ✅      |
+
 
 ---
 
 ## What needs real integration or further testing
 
-Authoritative checklist for the **dev/real** integration target: `docs/specs/backend-fulfillment.yaml` → **`context.osac_real_api_integration`** (mock mode invariant is spelled out there). The following areas work in mock mode but require additional work before the SPA fully satisfies that contract:
+Authoritative checklist for the **dev/real** integration target: `docs/specs/backend-fulfillment.yaml` → `**context.osac_real_api_integration`** (mock mode invariant is spelled out there). The following areas work in mock mode but require additional work before the SPA fully satisfies that contract:
 
 ### Authentication (highest priority)
 
-- **No real auth token is acquired.** The institutional sign-in screen simulates a short loading delay then sets `isLoggedIn = true` client-side. No OIDC/OAuth flow, no JWT, no session cookie.
-- **Integration needed:** Connect to the identity provider URL returned by `GET /api/fulfillment/v1/capabilities` (`authn.trustedTokenIssuers`). Implement PKCE or authorization-code flow. Attach the acquired token to all BFF requests.
-- The BFF already passes `Authorization` headers through to the upstream in dev mode — the plumbing is ready once the frontend obtains a token.
+- **Mock mode:** the institutional sign-in screen still simulates a short loading delay then sets `isLoggedIn = true` client-side (no real IdP).
+- **Dev mode (partial):** when `GET /api/fulfillment/v1/capabilities` returns `authn.trustedTokenIssuers`, the sign-in flow can store a **pasted JWT access token** for `Authorization: Bearer` on BFF calls. This exercises upstream + Authorino when the cluster is wired correctly; it is not a full browser OIDC flow.
+- **Integration needed:** Implement **Authorization Code + PKCE** against the issuer from capabilities; refresh / logout UX; attach the acquired token to all proxied BFF requests. See [Authorization](#authorization-dev-mode-and-fulfillment-rbac).
+- The BFF passes `Authorization` through to the upstream in dev mode for proxied prefixes.
 
 ### Per-tenant data scoping
 
@@ -267,9 +357,9 @@ Authoritative checklist for the **dev/real** integration target: `docs/specs/bac
 
 ### Real-time events / SSE
 
-- **Spec (dev mode):** Dashboard and full-page recent activities **SHOULD** use fulfillment’s `GET /api/events/v1/events` (Events watch) with the BFF proxying that path when `OSAC_API_MODE=dev`, same Authorization passthrough as `/api/fulfillment/v1/*`. See `docs/specs/backend-fulfillment.yaml` (`context.osac_bff_runtime_modes`, flow `tenant-user-dashboard-activities`).
-- **Current code:** The event route still returns a static JSON array from the BFF mock; the frontend does not yet open an `EventSource` / stream consumer.
-- **Integration needed:** Implement BFF proxy for `/api/events/v1/*` in dev mode; implement SSE or chunked stream handling and consume it in the dashboard + recent-activities pages per the spec.
+- **Spec (dev mode):** Dashboard and full-page recent activities **SHOULD** use fulfillment’s `GET /api/events/v1/events` (Events watch) with the BFF proxying that path when `OSAC_API_MODE=dev`, same Authorization passthrough as `/api/fulfillment/v1/`*. See `docs/specs/backend-fulfillment.yaml` (`context.osac_bff_runtime_modes`, flow `tenant-user-dashboard-activities`).
+- **Current code:** The BFF proxies `/api/events/v1/`* in dev mode; in mock mode it still returns a static JSON array. The frontend does not yet open an `EventSource` / stream consumer against the live watch.
+- **Integration needed:** Implement SSE or chunked stream handling and consume it in the dashboard + recent-activities pages per the spec.
 
 ### Network topology — real data
 
@@ -358,17 +448,19 @@ oc get route osac -n osac-dev
 
 Run all scripts from the **repo root**:
 
-| Script                 | Description                                          |
-| ---------------------- | ---------------------------------------------------- |
-| `pnpm dev:backend`     | Start BFF in mock mode with hot-reload (`tsx watch`) |
-| `pnpm dev:frontend`    | Start Vite dev server with HMR on `:5173`            |
-| `pnpm build`           | Production build for all packages                    |
-| `pnpm lint`                 | ESLint across all packages                              |
+
+| Script                     | Description                                                 |
+| -------------------------- | ----------------------------------------------------------- |
+| `pnpm dev:backend`         | Start BFF in mock mode with hot-reload (`tsx watch`)        |
+| `pnpm dev:frontend`        | Start Vite dev server with HMR on `:5173`                   |
+| `pnpm build`               | Production build for all packages                           |
+| `pnpm lint`                | ESLint across all packages                                  |
 | `pnpm check:pf-primitives` | Guardrail: disallowed raw HTML for layout in `app-frontend` |
-| `pnpm test`                 | Vitest unit tests across all packages                   |
-| `pnpm storybook`            | Start Storybook for `@osac/ui-components`               |
-| `pnpm build-storybook`      | Build static Storybook                                  |
-| `pnpm e2e:ci`               | Run Cypress E2E tests headlessly                        |
+| `pnpm test`                | Vitest unit tests across all packages                       |
+| `pnpm storybook`           | Start Storybook for `@osac/ui-components`                   |
+| `pnpm build-storybook`     | Build static Storybook                                      |
+| `pnpm e2e:ci`              | Run Cypress E2E tests headlessly                            |
+
 
 ---
 
@@ -424,11 +516,14 @@ apps/app-frontend/src/
       VmDetailDrawer.tsx, VmTable.tsx, VmActionsMenu.tsx, TemplateCard.tsx, …
 
 apps/app-backend/src/
-  index.ts          # Fastify server bootstrap
+  index.ts          # Fastify listen — delegates to buildApp()
+  app.ts            # buildApp() — composable app for tests + production
+  bff-contract.*.test.ts  # Vitest inject() — mock + dev proxy contract (see backend-fulfillment bff_test_harness)
   routes/
     fulfillment.ts  # /api/fulfillment/v1/* — mock + proxy
-    events.ts       # /api/events/v1/events — activity events
-    console.ts      # /api/osac/public/v1/console/* — console access stub
+    upstreamProxy.ts # streaming-safe passthrough to FULFILLMENT_API_URL (dev)
+    events.ts       # /api/events/v1/* — mock + proxy
+    console.ts      # /api/osac/public/v1/* — mock + proxy
 ```
 
-**Routing recap:** `App.tsx` imports shell and auth pages from `pages/shell` and `pages/auth`. Logged-in routes live under `AppShell` (`pages/shell/AppShell.tsx`) and map to `tenant/*`, `admin/*`, and `provider/*` paths per role (see `docs/specs/ui-flows/application-shell-session.yaml` for the canonical matrix).
+**Routing recap:** `App.tsx` imports shell and auth pages from `pages/shell` and `pages/auth`. Logged-in routes live under `AppShell` (`pages/shell/AppShell.tsx`) and map to `tenant/`*, `admin/*`, and `provider/*` paths per role (see `docs/specs/ui-flows/application-shell-session.yaml` for the canonical matrix).

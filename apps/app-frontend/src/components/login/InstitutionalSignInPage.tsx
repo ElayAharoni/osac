@@ -27,8 +27,10 @@ import { institutionalBrandingByTenant } from './institutionalBranding'
 
 interface Props {
   defaultEmail: string
-  onLoginSuccess: () => void
+  onLoginSuccess: (email: string, password: string) => void
   onChooseAnother: () => void
+  trustedIssuers?: string[]
+  submitError?: string | null
 }
 
 function renderHeaderMark(spec: HeaderMarkSpec) {
@@ -59,7 +61,13 @@ function renderHeaderMark(spec: HeaderMarkSpec) {
   )
 }
 
-export function InstitutionalSignInPage({ defaultEmail, onLoginSuccess, onChooseAnother }: Props) {
+export function InstitutionalSignInPage({
+  defaultEmail,
+  onLoginSuccess,
+  onChooseAnother,
+  trustedIssuers,
+  submitError,
+}: Props) {
   const { selectedTenant, isLoginLoading } = useSession()
 
   if (!selectedTenant) {
@@ -115,6 +123,8 @@ export function InstitutionalSignInPage({ defaultEmail, onLoginSuccess, onChoose
                     isLoading={isLoginLoading}
                     onSubmit={onLoginSuccess}
                     onChooseAnother={onChooseAnother}
+                    trustedIssuers={trustedIssuers}
+                    submitError={submitError}
                   />
                 </CardBody>
               </Card>

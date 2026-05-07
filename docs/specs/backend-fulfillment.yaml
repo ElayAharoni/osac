@@ -130,6 +130,29 @@ context:
         - Register dev proxy routes **before** or **instead of** mock handlers for the same paths.
         - Do not proxy these paths in OSAC_API_MODE=mock.
 
+    bff_test_harness:
+      active_modes: [mock, dev]
+      description: >
+        Vitest + Fastify inject() lock the BFF integration contract in apps/app-backend.
+        `buildApp()` composes the same route registration as production without listening.
+      locations:
+        - apps/app-backend/src/app.ts
+        - apps/app-backend/src/bff-contract.mock.test.ts
+        - apps/app-backend/src/bff-contract.proxy.test.ts
+        - apps/app-backend/vitest.config.ts
+      mock_mode_coverage:
+        - GET /health mode echo
+        - GET /api/fulfillment/v1/capabilities stub shape
+        - GET /api/fulfillment/v1/cluster_templates page envelope
+        - GET /api/events/v1/events mock pagination
+        - GET /api/osac/public/v1/console/.../access envelope
+      dev_proxy_coverage:
+        - Upstream URL joins FULFILLMENT_API_URL with request path for fulfillment, events, and osac public prefixes
+        - Authorization forwarded on fulfillment proxy (global fetch mocked)
+        - Response status and content-type passthrough (no reply.send(await res.json()) on proxy paths)
+      limitations:
+        - light-my-request may not buffer streamed proxy bodies; tests assert status, headers, and fetch wiring rather than full SSE payloads.
+
     jwt_claims_and_authorino_alignment:
       active_modes: [dev]
       description: Ensure JWT claims, IdP setup, and Authorino policy produce expected x-subject.
