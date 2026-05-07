@@ -32,7 +32,11 @@ export function PageHeader({ title, description, descriptionMaxWidth, actions }:
           </Content>
         )}
       </FlexItem>
-      {actions && <FlexItem style={{ flexShrink: 0 }}>{actions}</FlexItem>}
+      {actions && (
+        <FlexItem className="osac-page-toolbar-sticky__actions" style={{ flexShrink: 0 }}>
+          {actions}
+        </FlexItem>
+      )}
     </Flex>
   )
 }

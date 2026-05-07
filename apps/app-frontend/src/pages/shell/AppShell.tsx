@@ -18,7 +18,13 @@ import { PlaceholderPage } from '@osac/ui-components'
 import { useSession } from '../../contexts/SessionContext'
 
 // Pages
-import { DashboardPage, VmListPage, CatalogPage, RecentActivitiesPage } from '../tenant'
+import {
+  DashboardPage,
+  VmListPage,
+  CatalogPage,
+  RecentActivitiesPage,
+  TenantSparsePlaceholderPage,
+} from '../tenant'
 import { AdminDashboardPage, AdminUsersPage, AdminQuotaPage, AdminNetworksPage } from '../admin'
 import {
   ProviderAdminDashboardPage,
@@ -53,6 +59,19 @@ export function AppShell() {
   const isRecentActivities = location.pathname === '/activities'
 
   const navRows = useMemo(() => navRowsForRole(role), [role])
+  const handleSidebarNavigate = useCallback(
+    (path: string) => {
+      const isReselect = path === location.pathname
+      navigate(path, {
+        replace: isReselect,
+        state: {
+          navReselect: isReselect,
+          navSelectSeq: Date.now(),
+        },
+      })
+    },
+    [location.pathname, navigate],
+  )
 
   const toggleGroup = useCallback((groupId: string, expanded: boolean) => {
     setExpandedGroups((prev) => {
@@ -90,7 +109,7 @@ export function AppShell() {
       pathname={location.pathname}
       expandedGroups={expandedGroups}
       onToggleGroup={toggleGroup}
-      onNavigate={navigate}
+      onNavigate={handleSidebarNavigate}
       isDarkTheme={isDarkTheme}
       setIsDarkTheme={setIsDarkTheme}
       onLogout={logout}
@@ -155,7 +174,16 @@ export function AppShell() {
         <Route path="/provider/infrastructure" element={<ProviderInfraTopologyPage />} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to={defaultRoute} replace />} />
+        <Route
+          path="*"
+          element={
+            role === 'tenantUser' ? (
+              <TenantSparsePlaceholderPage />
+            ) : (
+              <Navigate to={defaultRoute} replace />
+            )
+          }
+        />
       </Routes>
     </Page>
   )

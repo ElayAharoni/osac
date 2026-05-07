@@ -2,7 +2,6 @@
  * flow: tenant-user-dashboard
  * step: tud_dashboard_home
  */
-import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -25,8 +24,9 @@ import {
 import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
 import { PageHeader } from '../../components/layout'
+import { DashboardUtilizationSection, DashboardQuotaSection } from '../../components/dashboard'
 import { useSession } from '../../contexts/SessionContext'
-import { useComputeInstances } from '../../api/hooks'
+import { useComputeInstances, useProvisionVm } from '../../api/hooks'
 import type { VmPowerState } from '@osac/api-contracts'
 
 interface StatCard {
@@ -40,10 +40,10 @@ interface StatCard {
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { selectedTenant } = useSession()
+  const { selectedTenant, isDarkTheme } = useSession()
   const wizardRef = useRef<CreateVmWizardHandle>(null)
   const { data: vms = [] } = useComputeInstances()
+  const provisionVm = useProvisionVm()
 
   const tenant = selectedTenant ?? 'northstar'
   const displayName = selectedTenant ? DEMO_TENANT_DISPLAY_USER[selectedTenant] : ''
@@ -112,9 +112,7 @@ export function DashboardPage() {
         ref={wizardRef}
         existingVms={vms}
         tenant={tenant !== 'vertexa' ? tenant : 'northstar'}
-        onProvision={(_vm) => {
-          void queryClient.invalidateQueries({ queryKey: ['compute_instances'] })
-        }}
+        onProvision={(vm) => provisionVm.mutate(vm)}
       />
 
       <PageHeader
@@ -173,6 +171,12 @@ export function DashboardPage() {
           </GalleryItem>
         ))}
       </Gallery>
+
+      {/* VM utilization trends + recent activities preview */}
+      <DashboardUtilizationSection isDarkTheme={isDarkTheme} />
+
+      {/* Resource quota donuts */}
+      <DashboardQuotaSection selectedTenant={selectedTenant} />
     </PageSection>
   )
 }

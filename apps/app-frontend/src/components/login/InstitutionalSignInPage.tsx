@@ -69,8 +69,7 @@ export function InstitutionalSignInPage({ defaultEmail, onLoginSuccess, onChoose
   const branding = institutionalBrandingByTenant[selectedTenant]
 
   return (
-    <Page style={{ minHeight: '100%', background: branding.pageBackground
-    }}>
+    <Page style={{ minHeight: '100%', background: branding.pageBackground }}>
       <PageSection style={{ background: branding.pageBackground }} isFilled>
         <Bullseye style={{ minHeight: '100%' }}>
           <Stack hasGutter style={{ width: '100%', maxWidth: 520, textAlign: 'center' }}>

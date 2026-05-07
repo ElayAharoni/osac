@@ -1,5 +1,6 @@
 flow: Application shell session
 statechart_ref: ../statecharts/application-shell-session.statechart.yaml
+design_system_ref: ../design-system.yaml
 
 rbac:
   required_permissions_by_step:
@@ -55,8 +56,11 @@ steps:
         - ThemeToggle
     ui_policy:
       prefer_patternfly_primitives: true
+      avoid_raw_div_for_structure: true
+      avoid_custom_css: true
       minimize_raw_div_wrappers: true
       max_raw_div_wrappers: 2
+      custom_css_policy_ref: ../design-system.yaml#layout_and_shell.implementation_policy
 
     states:
       - ready
