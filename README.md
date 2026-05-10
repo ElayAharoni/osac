@@ -131,13 +131,13 @@ FULFILLMENT_API_URL=https://fulfillment.your-env.example.com \
 pnpm dev:backend
 ```
 
-**Today:** in dev mode the BFF proxies `**/api/fulfillment/v1/*`**, `**/api/events/v1/***`, and `**/api/osac/public/v1/***` to `FULFILLMENT_API_URL` with streaming-safe passthrough and forwards inbound `Authorization` unchanged. See [Authorization (dev mode and fulfillment RBAC)](#authorization-dev-mode-and-fulfillment-rbac). Much of the SPA still reads `DEMO_*` fixtures and `VM_TEMPLATES` from `libs/api-contracts` even in dev mode.
+**Today:** in dev mode the BFF proxies `**/api/fulfillment/v1/*`**, `**/api/events/v1/*`**, and `**/api/osac/public/v1/***` to `FULFILLMENT_API_URL` with streaming-safe passthrough and forwards inbound `Authorization` unchanged. See [Authorization (dev mode and fulfillment RBAC)](#authorization-dev-mode-and-fulfillment-rbac). Much of the SPA still reads `DEMO_*` fixtures and `VM_TEMPLATES` from `libs/api-contracts` even in dev mode.
 
 **Spec target — non-mock flow:** `docs/specs/backend-fulfillment.yaml` → `context.osac_real_api_integration` — wire full **OIDC Authorization Code + PKCE** from `GET /api/fulfillment/v1/capabilities`, extend the SPA client and TanStack hooks for organizations, users, networks, and events, replace mock-only data where fulfillment has resources, align TypeScript with published fulfillment OpenAPI (or codegen), and treat utilization charts as an explicit gap or product-owned metrics API. **Mock mode (`OSAC_API_MODE=mock`) stays unchanged.**
 
 > **Note:** Interactive OIDC in the SPA is still incomplete vs that spec; dev mode can use a pasted JWT when capabilities list trusted issuers (see [Authorization](#authorization-dev-mode-and-fulfillment-rbac) and [What needs real integration](#what-needs-real-integration-or-further-testing)).
 
-### Environment variables reference 
+### Environment variables reference
 
 
 | Variable              | Default   | Description                                                                  |
@@ -257,6 +257,60 @@ http://localhost:5173/?osac-entry=evergreen-admin
 
 ## What is implemented
 
+```mermaid
+flowchart TB
+  subgraph Users["Clients"]
+    UI[osac-ui / consoles]
+    CLI[fulfillment-cli archived]
+  end
+
+  subgraph Core["Core runtime"]
+    FS[fulfillment-service API + DB]
+    OP[osac-operator CRDs + reconcile]
+  end
+
+  subgraph Deploy["Integration & install"]
+    INS[osac-installer]
+  end
+
+  subgraph Auto["Automation"]
+    AAP[osac-aap]
+  end
+
+  subgraph Platform["Hub / cloud stack"]
+    ACM[ACM / MCE / HCP]
+    VIRT[OCP-Virt / KubeVirt]
+    OVN[OVN UDN / Tenant networking]
+    KC[Keycloak / OIDC]
+    AUTH[Authorino / gateway policy]
+  end
+
+  subgraph More["Other org repos public listing"]
+    DOC[docs]
+    EP[enhancement-proposals]
+    TI[osac-test-infra]
+    GC[github-config]
+    WS[osac-workspace]
+    HM[host-management-openstack]
+    ISS[issues]
+  end
+
+  UI --> FS
+  CLI -.->|archived| FS
+  FS --> OP
+  FS --> KC
+  INS --> FS
+  INS --> OP
+  INS --> AAP
+  OP --> AAP
+  OP --> ACM
+  OP --> VIRT
+  OP --> OVN
+  OP --> AUTH
+  DOC -.-> DOC
+  TI -.->|e2e| INS
+
+
 ### Frontend (React SPA)
 
 
@@ -291,12 +345,12 @@ http://localhost:5173/?osac-entry=evergreen-admin
 | Area                      | Status | Notes                                                                                                                                                               |
 | ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Mock fulfillment routes   | ✅      | Full CRUD for VMs; read-only for templates, orgs, networks                                                                                                          |
-| Upstream proxy (dev mode) | ✅      | `/api/fulfillment/v1/*`, `/api/events/v1/*`, `/api/osac/public/v1/*` — streaming-safe passthrough; **spec:** remaining items in `context.osac_real_api_integration` |
+| Upstream proxy (dev mode) | ✅      | `/api/fulfillment/v1/`*, `/api/events/v1/`*, `/api/osac/public/v1/*` — streaming-safe passthrough; **spec:** remaining items in `context.osac_real_api_integration` |
 | Health / readiness probes | ✅      | `/health` and `/ready`                                                                                                                                              |
 | SPA static file serving   | ✅      | Serves `public/` in production; SPA fallback for client-side routing                                                                                                |
 | CORS                      | ✅      | Open in dev, disabled in production                                                                                                                                 |
-| Event stream endpoint     | ✅      | Mock: static JSON; **dev:** proxy `/api/events/v1/*` to fulfillment (stream passthrough)                                                                            |
-| Console access            | ✅      | Mock: stub URLs; **dev:** proxy `/api/osac/public/v1/*` to fulfillment                                                                                              |
+| Event stream endpoint     | ✅      | Mock: static JSON; **dev:** proxy `/api/events/v1/`* to fulfillment (stream passthrough)                                                                            |
+| Console access            | ✅      | Mock: stub URLs; **dev:** proxy `/api/osac/public/v1/`* to fulfillment                                                                                              |
 
 
 ### Shared libraries
@@ -395,6 +449,8 @@ Authoritative checklist for the **dev/real** integration target: `docs/specs/bac
 ```bash
 pnpm build
 ```
+
+
 
 This runs `tsc` on the backend and `vite build` on the frontend. The SPA output lands in `apps/app-backend/public/` so the BFF can serve it.
 
@@ -526,4 +582,4 @@ apps/app-backend/src/
     console.ts      # /api/osac/public/v1/* — mock + proxy
 ```
 
-**Routing recap:** `App.tsx` imports shell and auth pages from `pages/shell` and `pages/auth`. Logged-in routes live under `AppShell` (`pages/shell/AppShell.tsx`) and map to `tenant/`*, `admin/*`, and `provider/*` paths per role (see `docs/specs/ui-flows/application-shell-session.yaml` for the canonical matrix).
+**Routing recap:** `App.tsx` imports shell and auth pages from `pages/shell` and `pages/auth`. Logged-in routes live under `AppShell` (`pages/shell/AppShell.tsx`) and map to `tenant/`*, `admin/`*, and `provider/*` paths per role (see `docs/specs/ui-flows/application-shell-session.yaml` for the canonical matrix).
