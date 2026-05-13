@@ -2,9 +2,10 @@
  * flow: vm-template-catalog
  * steps: vmc_catalog_grid, vmc_catalog_provider_global
  */
-import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Alert,
+  Bullseye,
   Button,
   Checkbox,
   Content,
@@ -28,6 +29,7 @@ import {
   PageSection,
   SearchInput,
   Sidebar,
+  Spinner,
   SidebarContent,
   SidebarPanel,
   Stack,
@@ -37,13 +39,13 @@ import {
 } from '@patternfly/react-core'
 import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
-import type { ClusterTemplate } from '@osac/api-contracts'
+import type { ClusterTemplate, ComputeInstance } from '@osac/api-contracts'
 import { useLocation } from 'react-router-dom'
 import linuxMascotUrl from '../../assets/guest-os-tux-linux.png'
 import { useSession } from '../../contexts/SessionContext'
-import { useClusterTemplates, useComputeInstances } from '../../api/hooks'
+import { useComputeInstanceTemplates, useComputeInstances, useProvisionVm } from '../../api/hooks'
 import { PageHeader } from '../../components/layout'
-import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
+import type { CreateVmWizardHandle, DeploymentMode } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
 import { TemplateCard } from '../../components/vm/TemplateCard'
 
@@ -103,7 +105,7 @@ function searchableTemplateText(template: ClusterTemplate): string {
     if (template.workloadProfile === 'data-processing') return 'Data processing'
     return 'Analytics'
   })()
-  const bootSourcePvc = `${template.id}-boot-pvc`
+  const bootDiskGib = template.defaultBootDiskSizeGib ?? 40
 
   return [
     template.title,
@@ -113,7 +115,8 @@ function searchableTemplateText(template: ClusterTemplate): string {
     template.workload,
     template.workloadProfile,
     workloadLabel,
-    bootSourcePvc,
+    `${bootDiskGib} gib`,
+    bootDiskGib.toString(),
     'Pod network',
     'Guest logs on',
     template.defaultCores?.toString(),
@@ -164,7 +167,6 @@ function OsIcon({ icon }: { icon?: string }) {
 
 export function CatalogPage({ isProviderGlobal = false }: Props) {
   const location = useLocation()
-  const queryClient = useQueryClient()
   const { selectedTenant } = useSession()
   const [search, setSearch] = useState('')
   const [osFilters, setOsFilters] = useState<Record<OsFilterKey, boolean>>({
@@ -182,10 +184,24 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
   const wizardRef = useRef<CreateVmWizardHandle>(null)
   const drawerTitleRef = useRef<HTMLHeadingElement>(null)
 
-  const { data: templates = [] } = useClusterTemplates()
+  const {
+    data: templates = [],
+    isPending: templatesLoading,
+    isError: templatesError,
+    error: templatesErrorDetail,
+    refetch: refetchTemplates,
+  } = useComputeInstanceTemplates()
   const { data: vms = [] } = useComputeInstances()
+  const provisionVm = useProvisionVm()
 
   const tenant = selectedTenant && selectedTenant !== 'vertexa' ? selectedTenant : 'northstar'
+
+  const handleWizardProvision = useCallback(
+    (vm: ComputeInstance, meta: { mode: DeploymentMode }) => {
+      provisionVm.mutate({ vm, specTemplateOnly: meta.mode === 'template' })
+    },
+    [provisionVm],
+  )
   const searchTerm = search.trim().toLowerCase()
 
   const activeOsFilterKeys = useMemo(
@@ -305,50 +321,73 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
       </SidebarPanel>
       <SidebarContent>
         <Stack hasGutter>
-          <StackItem>
-            <SearchInput
-              className="osac-template-catalog-search"
-              placeholder="Search templates"
-              value={search}
-              onChange={(_e, value) => setSearch(value)}
-              onClear={() => setSearch('')}
-              aria-label="Filter catalog by keyword"
-            />
-          </StackItem>
-          <StackItem>
-            <Content component="small" className="osac-template-catalog-count">
-              {filtered.length} templates
-            </Content>
-          </StackItem>
-          <StackItem>
-            {filtered.length === 0 ? (
-              <Content component="p" className="osac-template-empty-state">
-                No templates match your current filters and search.
-              </Content>
-            ) : (
-              <Gallery hasGutter className="osac-template-gallery">
-                {filtered.map((template) => (
-                  <GalleryItem key={template.id}>
-                    <div
-                      className="tenant-vm-catalog-template-card-wrap"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Open template details for ${template.title}`}
-                      onClick={() => setSelectedTemplate(template)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          setSelectedTemplate(template)
-                        }
-                      }}
-                    >
-                      <TemplateCard template={template} />
-                    </div>
-                  </GalleryItem>
-                ))}
-              </Gallery>
-            )}
-          </StackItem>
+          {templatesError ? (
+            <StackItem>
+              <Stack hasGutter>
+                <StackItem>
+                  <Alert variant="danger" title="Could not load templates">
+                    {templatesErrorDetail instanceof Error ? templatesErrorDetail.message : 'Request failed'}
+                  </Alert>
+                </StackItem>
+                <StackItem>
+                  <Button variant="primary" onClick={() => void refetchTemplates()}>
+                    Retry
+                  </Button>
+                </StackItem>
+              </Stack>
+            </StackItem>
+          ) : (
+            <>
+              <StackItem>
+                <SearchInput
+                  className="osac-template-catalog-search"
+                  placeholder="Search templates"
+                  value={search}
+                  onChange={(_e, value) => setSearch(value)}
+                  onClear={() => setSearch('')}
+                  aria-label="Filter catalog by keyword"
+                />
+              </StackItem>
+              <StackItem>
+                <Content component="small" className="osac-template-catalog-count">
+                  {templatesLoading ? '…' : filtered.length} templates
+                </Content>
+              </StackItem>
+              <StackItem>
+                {templatesLoading ? (
+                  <Bullseye style={{ padding: 'var(--pf-t--global--spacer--2xl)' }}>
+                    <Spinner aria-label="Loading templates" />
+                  </Bullseye>
+                ) : filtered.length === 0 ? (
+                  <Content component="p" className="osac-template-empty-state">
+                    No templates match your current filters and search.
+                  </Content>
+                ) : (
+                  <Gallery hasGutter className="osac-template-gallery">
+                    {filtered.map((template) => (
+                      <GalleryItem key={template.id}>
+                        <div
+                          className="tenant-vm-catalog-template-card-wrap"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open template details for ${template.title}`}
+                          onClick={() => setSelectedTemplate(template)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedTemplate(template)
+                            }
+                          }}
+                        >
+                          <TemplateCard template={template} />
+                        </div>
+                      </GalleryItem>
+                    ))}
+                  </Gallery>
+                )}
+              </StackItem>
+            </>
+          )}
         </Stack>
       </SidebarContent>
     </Sidebar>
@@ -360,9 +399,7 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
         ref={wizardRef}
         existingVms={vms}
         tenant={tenant}
-        onProvision={(_vm) => {
-          void queryClient.invalidateQueries({ queryKey: ['compute_instances'] })
-        }}
+        onProvision={handleWizardProvision}
         defaultMode="template"
       />
 
@@ -465,7 +502,9 @@ export function CatalogPage({ isProviderGlobal = false }: Props) {
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>Storage</DescriptionListTerm>
-                          <DescriptionListDescription>Boot volume</DescriptionListDescription>
+                          <DescriptionListDescription>
+                            {selectedTemplate.defaultBootDiskSizeGib ?? 40} GiB boot disk
+                          </DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>Workload</DescriptionListTerm>

@@ -9,9 +9,30 @@ import type {
   FulfillmentCapabilities,
   PageOfT,
 } from '@osac/api-contracts'
+import {
+  normalizeComputeInstance,
+  normalizeComputeInstancePage,
+  normalizeComputeInstanceTemplate,
+  normalizeComputeInstanceTemplatePage,
+  serializeComputeInstanceForCreate,
+  type SerializeComputeInstanceForCreateOptions,
+} from '@osac/api-contracts'
 import { buildAuthHeaders } from './authToken'
 
 const BASE = '/api/fulfillment/v1'
+
+async function parseJson(res: Response): Promise<unknown> {
+  return res.json()
+}
+
+/** POST/PATCH fulfillment returns `{ object }` for some resources; GET returns the resource directly. */
+function unwrapFulfillmentObject(data: unknown): unknown {
+  if (data && typeof data === 'object' && data !== null && 'object' in data) {
+    const o = (data as { object?: unknown }).object
+    if (o !== undefined) return o
+  }
+  return data
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -22,7 +43,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.text().catch(() => '')
     throw new Error(`API ${res.status}: ${body || res.statusText}`)
   }
-  return res.json() as Promise<T>
+  return (await parseJson(res)) as T
 }
 
 export function getFulfillmentCapabilities(): Promise<FulfillmentCapabilities> {
@@ -30,7 +51,7 @@ export function getFulfillmentCapabilities(): Promise<FulfillmentCapabilities> {
 }
 
 // ---------------------------------------------------------------------------
-// Compute instances
+// Compute instances (normalized wire → ComputeInstance)
 // ---------------------------------------------------------------------------
 
 export interface ListComputeInstancesParams {
@@ -39,7 +60,7 @@ export interface ListComputeInstancesParams {
   offset?: number
 }
 
-export function listComputeInstances(
+export async function listComputeInstances(
   params: ListComputeInstancesParams = {},
 ): Promise<PageOfT<ComputeInstance>> {
   const q = new URLSearchParams()
@@ -47,63 +68,112 @@ export function listComputeInstances(
   if (params.limit != null) q.set('limit', String(params.limit))
   if (params.offset != null) q.set('offset', String(params.offset))
   const qs = q.toString()
-  return request<PageOfT<ComputeInstance>>(`/compute_instances${qs ? `?${qs}` : ''}`)
-}
-
-export function getComputeInstance(id: string): Promise<ComputeInstance> {
-  return request<ComputeInstance>(`/compute_instances/${id}`)
-}
-
-export async function createComputeInstance(vm: Partial<ComputeInstance>): Promise<ComputeInstance> {
-  const res = await fetch(`${BASE}/compute_instances`, {
-    method: 'POST',
+  const path = `/compute_instances${qs ? `?${qs}` : ''}`
+  const res = await fetch(`${BASE}${path}`, {
     headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ object: vm }),
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`API ${res.status}: ${body || res.statusText}`)
   }
-  const data = (await res.json()) as { object?: ComputeInstance }
-  if (!data.object) throw new Error('API: missing object in create response')
-  return data.object
+  return normalizeComputeInstancePage(await parseJson(res))
 }
 
-export function patchComputeInstance(
+export async function getComputeInstance(id: string): Promise<ComputeInstance> {
+  const res = await fetch(`${BASE}/compute_instances/${encodeURIComponent(id)}`, {
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  return normalizeComputeInstance(await parseJson(res))
+}
+
+export async function createComputeInstance(
+  vm: Partial<ComputeInstance>,
+  opts?: SerializeComputeInstanceForCreateOptions,
+): Promise<ComputeInstance> {
+  const res = await fetch(`${BASE}/compute_instances`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    /** Fulfillment HTTP unmarshals **ComputeInstance** at root (not `{ "object": … }`). */
+    body: JSON.stringify(serializeComputeInstanceForCreate(vm, opts)),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  const raw = unwrapFulfillmentObject(await parseJson(res))
+  if (raw == null || typeof raw !== 'object') throw new Error('API: missing object in create response')
+  return normalizeComputeInstance(raw)
+}
+
+export async function patchComputeInstance(
   id: string,
   patch: Partial<ComputeInstance>,
 ): Promise<ComputeInstance> {
-  return request<ComputeInstance>(`/compute_instances/${id}`, {
+  const res = await fetch(`${BASE}/compute_instances/${encodeURIComponent(id)}`, {
     method: 'PATCH',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(patch),
   })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  const raw = unwrapFulfillmentObject(await parseJson(res))
+  if (raw == null || typeof raw !== 'object') throw new Error('API: missing object in patch response')
+  return normalizeComputeInstance(raw)
 }
 
-export function deleteComputeInstance(id: string): Promise<void> {
-  return request<void>(`/compute_instances/${id}`, { method: 'DELETE' })
+export async function deleteComputeInstance(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/compute_instances/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Cluster templates
+// Compute instance templates (VM catalog + wizard; template-catalog-wizard-api-alignment)
 // ---------------------------------------------------------------------------
 
-export interface ListTemplatesParams {
+export interface ListComputeInstanceTemplatesParams {
   filter?: string
   limit?: number
   offset?: number
 }
 
-export function listClusterTemplates(
-  params: ListTemplatesParams = {},
+export async function listComputeInstanceTemplates(
+  params: ListComputeInstanceTemplatesParams = {},
 ): Promise<PageOfT<ClusterTemplate>> {
   const q = new URLSearchParams()
   if (params.filter) q.set('filter', params.filter)
   if (params.limit != null) q.set('limit', String(params.limit))
   if (params.offset != null) q.set('offset', String(params.offset))
   const qs = q.toString()
-  return request<PageOfT<ClusterTemplate>>(`/cluster_templates${qs ? `?${qs}` : ''}`)
+  const path = `/compute_instance_templates${qs ? `?${qs}` : ''}`
+  const res = await fetch(`${BASE}${path}`, {
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  return normalizeComputeInstanceTemplatePage(await parseJson(res))
 }
 
-export function getClusterTemplate(id: string): Promise<ClusterTemplate> {
-  return request<ClusterTemplate>(`/cluster_templates/${id}`)
+export async function getComputeInstanceTemplate(id: string): Promise<ClusterTemplate> {
+  const res = await fetch(`${BASE}/compute_instance_templates/${encodeURIComponent(id)}`, {
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  return normalizeComputeInstanceTemplate(await parseJson(res))
 }

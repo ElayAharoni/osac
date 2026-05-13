@@ -1,3 +1,7 @@
+/**
+ * WIZARD_TEMPLATE_ONLY: this step is not mounted (wizard is template-only). Kept for RESTORE when
+ * fulfillment supports "new" and "clone" creation methods — wire back in CreateVmWizard `renderStepBody`.
+ */
 import {
   Card,
   CardBody,

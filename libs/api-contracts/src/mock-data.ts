@@ -7,6 +7,7 @@ import type {
   OsType,
   VmPowerState,
 } from './types.js'
+import { normalizeComputeInstance } from './computeInstanceNormalize.js'
 
 // ---------------------------------------------------------------------------
 // Demo tenant metadata
@@ -455,28 +456,87 @@ const EVERGREEN_VMS: VmBlueprint[] = [
   },
 ]
 
+function fulfillmentProtoState(state: VmPowerState): string {
+  const m: Record<VmPowerState, string> = {
+    running: 'COMPUTE_INSTANCE_STATE_RUNNING',
+    stopped: 'COMPUTE_INSTANCE_STATE_STOPPED',
+    paused: 'COMPUTE_INSTANCE_STATE_PAUSED',
+    starting: 'COMPUTE_INSTANCE_STATE_STARTING',
+    deleting: 'COMPUTE_INSTANCE_STATE_DELETING',
+    error: 'COMPUTE_INSTANCE_STATE_ERROR',
+  }
+  return m[state]
+}
+
+function mockImageWire(os: OsType): { source_type: string; source_ref: string } {
+  if (os === 'windows') {
+    return {
+      source_type: 'SOURCE_TYPE_REGISTRY',
+      source_ref: 'mcr.microsoft.com/windows/server:latest',
+    }
+  }
+  if (os === 'rhel') {
+    return {
+      source_type: 'SOURCE_TYPE_REGISTRY',
+      source_ref: 'registry.redhat.io/rhel9:latest',
+    }
+  }
+  return {
+    source_type: 'SOURCE_TYPE_REGISTRY',
+    source_ref: 'docker.io/library/ubuntu:22.04',
+  }
+}
+
+/** Seed VMs as fulfillment-shaped wire + normalize — matches PROTO_JSON path in dev. */
 function buildVm(blueprint: VmBlueprint, tenant: DemoTenantId, index: number): ComputeInstance {
   const id = `vm-${tenant}-${index.toString().padStart(3, '0')}`
   const createdMs = Date.now() - (index + 1) * 86400000
-  return {
+  const bootGib = Math.max(32, blueprint.memoryGib * 2)
+  const wire = {
     id,
     metadata: {
       name: blueprint.name,
-      createdAt: new Date(createdMs).toISOString(),
+      creation_timestamp: new Date(createdMs).toISOString(),
+      tenants: [tenant],
+      creators: ['demo-seed'],
+      version: 1,
+      labels: {},
     },
     spec: {
+      template:
+        blueprint.os === 'rhel'
+          ? 'rhel-9-general'
+          : blueprint.os === 'windows'
+            ? 'windows-2022-general'
+            : 'ubuntu-22-general',
       cores: blueprint.cores,
-      memoryGib: blueprint.memoryGib,
+      memory_gib: blueprint.memoryGib,
+      boot_disk: { size_gib: bootGib },
       subnet: blueprint.subnet,
+      image: mockImageWire(blueprint.os),
+      run_strategy: 'Always',
     },
     status: {
-      state: blueprint.state,
-      ipAddress: blueprint.ipAddress,
+      state: fulfillmentProtoState(blueprint.state),
+      ip_address: blueprint.ipAddress,
+      conditions:
+        index === 0
+          ? [
+              {
+                type: 'CONDITION_TYPE_READY',
+                status: 'CONDITION_STATUS_TRUE',
+                reason: 'MinimumReplicasAvailable',
+                message: 'Instance passed readiness checks.',
+                last_transition_time: new Date(createdMs).toISOString(),
+              },
+            ]
+          : [],
     },
-    os: blueprint.os,
     description: blueprint.description,
+    os: blueprint.os,
     createdAtMs: createdMs,
   }
+  return normalizeComputeInstance(wire)
 }
 
 export function buildVmsForTenant(tenant: DemoTenantId): ComputeInstance[] {
@@ -498,6 +558,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'high-performance',
     defaultCores: 2,
     defaultMemoryGib: 8,
+    defaultBootDiskSizeGib: 40,
     tags: ['RHEL', 'Linux', 'General'],
     icon: 'rhel',
   },
@@ -510,6 +571,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'data-processing',
     defaultCores: 8,
     defaultMemoryGib: 32,
+    defaultBootDiskSizeGib: 128,
     tags: ['RHEL', 'Database', 'PostgreSQL', 'MySQL'],
     icon: 'rhel',
   },
@@ -522,6 +584,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'high-performance',
     defaultCores: 2,
     defaultMemoryGib: 4,
+    defaultBootDiskSizeGib: 32,
     tags: ['RHEL', 'Web', 'Nginx'],
     icon: 'rhel',
   },
@@ -534,6 +597,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'high-performance',
     defaultCores: 2,
     defaultMemoryGib: 4,
+    defaultBootDiskSizeGib: 40,
     tags: ['Ubuntu', 'Linux', 'LTS'],
     icon: 'linux',
   },
@@ -546,6 +610,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'analytics',
     defaultCores: 4,
     defaultMemoryGib: 8,
+    defaultBootDiskSizeGib: 64,
     tags: ['Ubuntu', 'Docker', 'Kubernetes', 'DevOps'],
     icon: 'linux',
   },
@@ -558,6 +623,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'high-performance',
     defaultCores: 2,
     defaultMemoryGib: 8,
+    defaultBootDiskSizeGib: 80,
     tags: ['Windows', 'Server', 'Enterprise'],
     icon: 'windows',
   },
@@ -570,6 +636,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'data-processing',
     defaultCores: 4,
     defaultMemoryGib: 16,
+    defaultBootDiskSizeGib: 128,
     tags: ['Windows', 'SQL Server', 'Database'],
     icon: 'windows',
   },
@@ -582,6 +649,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'machine-learning',
     defaultCores: 8,
     defaultMemoryGib: 64,
+    defaultBootDiskSizeGib: 256,
     tags: ['ML', 'PyTorch', 'RHEL', 'GPU'],
     icon: 'rhel',
   },
@@ -594,6 +662,7 @@ export const VM_TEMPLATES: ClusterTemplate[] = [
     workloadProfile: 'analytics',
     defaultCores: 2,
     defaultMemoryGib: 4,
+    defaultBootDiskSizeGib: 24,
     tags: ['Compliance', 'OpenSCAP', 'Security', 'Linux'],
     icon: 'linux',
   },

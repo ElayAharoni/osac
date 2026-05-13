@@ -25,10 +25,16 @@ import {
   TabTitleText,
   Title,
 } from '@patternfly/react-core'
+import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table'
 import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
 import { useState } from 'react'
 import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
+import {
+  formatConditionStatusForDisplay,
+  resolveVmOsForUi,
+  shortSubnetDisplay,
+} from '@osac/api-contracts'
 import linuxMascotUrl from '../../assets/guest-os-tux-linux.png'
 import { VmStatusLabel } from '@osac/ui-components'
 import { VmActionsMenu } from './VmActionsMenu'
@@ -38,8 +44,19 @@ interface Props {
   effectiveState: VmPowerState
   onClose: () => void
   onPower: (action: 'start' | 'stop' | 'restart') => void
-  onClone: () => void
+  /** WIZARD_TEMPLATE_ONLY: omit to hide clone entry point until fulfillment supports clone. */
+  onClone?: () => void
   onOpenConsole: () => void
+}
+
+function humanizeConditionType(type: string): string {
+  return type.replace(/^CONDITION_TYPE_/i, '').replace(/_/g, ' ') || type
+}
+
+function formatIsoDate(iso?: string): string {
+  if (!iso?.trim()) return '—'
+  const t = Date.parse(iso.trim())
+  return Number.isNaN(t) ? iso : new Date(t).toLocaleString()
 }
 
 export function VmDetailDrawer({
@@ -62,7 +79,11 @@ export function VmDetailDrawer({
         ? 'Console is unavailable while the virtual machine is paused.'
         : 'Console is unavailable while the virtual machine is stopped.'
 
-  const osLabel = vm.os === 'rhel' ? 'RHEL' : vm.os === 'windows' ? 'Windows' : 'Linux'
+  const uiOs = resolveVmOsForUi(vm)
+  const osLabel = uiOs === 'rhel' ? 'RHEL' : uiOs === 'windows' ? 'Windows' : 'Linux'
+
+  const tenantsLine = vm.metadata.tenants?.length ? vm.metadata.tenants.join(', ') : '—'
+  const creatorsLine = vm.metadata.creators?.length ? vm.metadata.creators.join(', ') : '—'
 
   return (
     <Stack hasGutter>
@@ -127,9 +148,9 @@ export function VmDetailDrawer({
                             alignItems={{ default: 'alignItemsCenter' }}
                             spaceItems={{ default: 'spaceItemsSm' }}
                           >
-                            {vm.os === 'windows' ? (
+                            {uiOs === 'windows' ? (
                               <WindowsIcon style={{ width: 16, height: 16, color: '#0078D4' }} />
-                            ) : vm.os === 'rhel' ? (
+                            ) : uiOs === 'rhel' ? (
                               <RedhatIcon style={{ width: 16, height: 16, color: '#EE0000' }} />
                             ) : (
                               <img
@@ -145,13 +166,23 @@ export function VmDetailDrawer({
                         </DescriptionListDescription>
                       </DescriptionListGroup>
                       <DescriptionListGroup>
+                        <DescriptionListTerm>Template</DescriptionListTerm>
+                        <DescriptionListDescription>{vm.spec.template ?? '—'}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Run strategy</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          {vm.spec.runStrategy ?? '—'}
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
                         <DescriptionListTerm>vCPU</DescriptionListTerm>
                         <DescriptionListDescription>{vm.spec.cores ?? '—'}</DescriptionListDescription>
                       </DescriptionListGroup>
                       <DescriptionListGroup>
                         <DescriptionListTerm>Memory</DescriptionListTerm>
                         <DescriptionListDescription>
-                          {vm.spec.memoryGib ? `${vm.spec.memoryGib} GiB` : '—'}
+                          {vm.spec.memoryGib != null ? `${vm.spec.memoryGib} GiB` : '—'}
                         </DescriptionListDescription>
                       </DescriptionListGroup>
                       {vm.description && (
@@ -164,8 +195,22 @@ export function VmDetailDrawer({
                         <DescriptionListTerm>Created</DescriptionListTerm>
                         <DescriptionListDescription>
                           {vm.metadata.createdAt
-                            ? new Date(vm.metadata.createdAt).toLocaleDateString()
+                            ? formatIsoDate(vm.metadata.createdAt)
                             : '—'}
+                        </DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Tenants</DescriptionListTerm>
+                        <DescriptionListDescription>{tenantsLine}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Creators</DescriptionListTerm>
+                        <DescriptionListDescription>{creatorsLine}</DescriptionListDescription>
+                      </DescriptionListGroup>
+                      <DescriptionListGroup>
+                        <DescriptionListTerm>Version</DescriptionListTerm>
+                        <DescriptionListDescription>
+                          {vm.metadata.version != null ? String(vm.metadata.version) : '—'}
                         </DescriptionListDescription>
                       </DescriptionListGroup>
                     </DescriptionList>
@@ -184,7 +229,9 @@ export function VmDetailDrawer({
                       </DescriptionListGroup>
                       <DescriptionListGroup>
                         <DescriptionListTerm>Subnet</DescriptionListTerm>
-                        <DescriptionListDescription>{vm.spec.subnet ?? '—'}</DescriptionListDescription>
+                        <DescriptionListDescription>
+                          {shortSubnetDisplay(vm.spec.subnet)}
+                        </DescriptionListDescription>
                       </DescriptionListGroup>
                       <DescriptionListGroup>
                         <DescriptionListTerm>Security groups</DescriptionListTerm>
@@ -202,18 +249,35 @@ export function VmDetailDrawer({
                     style={{ padding: 'var(--pf-t--global--spacer--md) 0' }}
                   >
                     {vm.status.conditions && vm.status.conditions.length > 0 ? (
-                      <Stack hasGutter>
-                        {vm.status.conditions.map((c, i) => (
-                          <StackItem key={i}>
-                            <Content component="p">
-                              <strong>{c.type}:</strong> {c.status}
-                              {c.message ? ` — ${c.message}` : ''}
-                            </Content>
-                          </StackItem>
-                        ))}
-                      </Stack>
+                      <Table aria-label="Virtual machine conditions" variant="compact">
+                        <Thead>
+                          <Tr>
+                            <Th>Type</Th>
+                            <Th>Status</Th>
+                            <Th>Reason</Th>
+                            <Th>Message</Th>
+                            <Th>Last transition</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {vm.status.conditions.map((c, i) => (
+                            <Tr key={`${c.type}-${i}`}>
+                              <Td dataLabel="Type">{humanizeConditionType(c.type)}</Td>
+                              <Td dataLabel="Status">{formatConditionStatusForDisplay(c.status)}</Td>
+                              <Td dataLabel="Reason">{c.reason ?? '—'}</Td>
+                              <Td dataLabel="Message">{c.message ?? '—'}</Td>
+                              <Td dataLabel="Last transition">
+                                {formatIsoDate(c.lastTransitionTime)}
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
                     ) : (
-                      <Content component="p" style={{ color: 'var(--pf-t--global--text--color--subtle)' }}>
+                      <Content
+                        component="p"
+                        style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
+                      >
                         No conditions reported.
                       </Content>
                     )}
@@ -245,7 +309,10 @@ export function VmDetailDrawer({
                   <VmStatusLabel state={effectiveState} />
                 </StackItem>
                 <StackItem>
-                  <Content component="p" style={{ margin: 0, color: 'var(--pf-t--global--text--color--subtle)' }}>
+                  <Content
+                    component="p"
+                    style={{ margin: 0, color: 'var(--pf-t--global--text--color--subtle)' }}
+                  >
                     {consoleSummary}
                   </Content>
                 </StackItem>

@@ -16,11 +16,32 @@ export interface WizardState {
   /** Optional cloud-init / user-data for new path; BFF may map to spec.userData when non-empty. */
   cloudInitUserDataNew: string
   selectedTemplateId: string | null
+  /** Template path: boot disk size (GiB), integer string; maps to `spec.boot_disk.size_gib`. */
+  templateBootDiskSizeGib: string
+  /** vCPU count; maps to `spec.cores` (int32). Seeded from template defaults in the UI. */
+  templateCores: string
+  /** Memory in GiB; maps to `spec.memory_gib`. Seeded from template defaults. */
+  templateMemoryGib: string
+  /** Fulfillment REST `run_strategy`: `Always` or `Halted`. */
+  templateRunStrategy: string
+  /** Optional subnet fulfillment id; maps to `spec.subnet`. */
+  templateSubnetId: string
+  /** Comma-separated security group fulfillment ids; maps to `spec.security_groups`. */
+  templateSecurityGroupsRaw: string
+  /** SSH public key; maps to `spec.ssh_key`. */
+  templateSshPublicKey: string
+  /** Cloud-init / ignition-style payload; maps to `spec.user_data`. */
+  templateUserData: string
+  /** Optional image `source_type` (proto enum string); maps with `templateImageSourceRef` to `spec.image`. */
+  templateImageSourceType: string
+  /** Optional image reference (e.g. registry URI); maps with `templateImageSourceType` to `spec.image`. */
+  templateImageSourceRef: string
+  /**
+   * Optional extra data disks as comma-separated GiB sizes (e.g. `50, 100`);
+   * maps to `spec.additional_disks` as `{ size_gib }[]`.
+   */
+  templateAdditionalDisksGibRaw: string
   templateVmName: string
-  headless: boolean
-  /** When true, guest serial/console logs remain accessible in the demo UX. */
-  guestLogAccess: boolean
-  logDeletion: boolean
   cloneSourceVmId: string | null
   cloneNewName: string
   startAfterCreate: boolean

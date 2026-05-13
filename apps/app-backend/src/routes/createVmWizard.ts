@@ -1,16 +1,79 @@
 /**
  * BFF create-vm-wizard session API — mock orchestration per docs/specs/backend-fulfillment.yaml
  * (bff_demo_osac_extensions.create_virtual_machine_wizard).
+ *
+ * WIZARD_TEMPLATE_ONLY (2026): sessions are **template-only** (see `orderedStepIds`, session POST handler,
+ * and `buildVmFromDraft`). Clone / scratch paths are commented with RESTORE markers.
  * Step ids and validation: docs/specs/ui-flows/create-virtual-machine-wizard.yaml (canonical_bff_step_ids, step_worksheets).
  */
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { VM_TEMPLATES, type ComputeInstance, type OsType } from '@osac/api-contracts'
+import {
+  VM_TEMPLATES,
+  normalizeRunStrategyWire,
+  type ComputeInstance,
+  type OsType,
+} from '@osac/api-contracts'
 import { vmStore } from '../mock-vm-store.js'
 
 const prefix = '/api/osac/bff/v1/create-vm-wizard'
 
 type DeploymentMode = 'new' | 'template' | 'clone'
+
+const TEMPLATE_BOOT_DISK_MIN_GIB = 1
+const TEMPLATE_BOOT_DISK_MAX_GIB = 512
+const TEMPLATE_CORES_MIN = 1
+const TEMPLATE_CORES_MAX = 128
+const TEMPLATE_MEMORY_GIB_MIN = 1
+const TEMPLATE_MEMORY_GIB_MAX = 512
+
+function parseTemplateBootDiskGibInput(raw: string): number | null {
+  const t = raw.trim()
+  if (!/^\d+$/.test(t)) return null
+  const n = Number(t)
+  if (n < TEMPLATE_BOOT_DISK_MIN_GIB || n > TEMPLATE_BOOT_DISK_MAX_GIB) return null
+  return n
+}
+
+function parseTemplateCoresInput(raw: string): number | null {
+  const t = raw.trim()
+  if (!/^\d+$/.test(t)) return null
+  const n = Number(t)
+  if (n < TEMPLATE_CORES_MIN || n > TEMPLATE_CORES_MAX) return null
+  return n
+}
+
+function parseTemplateMemoryGibInput(raw: string): number | null {
+  const t = raw.trim()
+  if (!/^\d+$/.test(t)) return null
+  const n = Number(t)
+  if (n < TEMPLATE_MEMORY_GIB_MIN || n > TEMPLATE_MEMORY_GIB_MAX) return null
+  return n
+}
+
+function parseTemplateAdditionalDisksGibInput(raw: string): number[] | null {
+  const t = raw.trim()
+  if (t === '') return []
+  const parts = t
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const out: number[] = []
+  for (const p of parts) {
+    if (!/^\d+$/.test(p)) return null
+    const n = Number(p)
+    if (n < TEMPLATE_BOOT_DISK_MIN_GIB || n > TEMPLATE_BOOT_DISK_MAX_GIB) return null
+    out.push(n)
+  }
+  return out
+}
+
+function parseTemplateSecurityGroupsInput(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 type WizardDraft = {
   mode: DeploymentMode
@@ -21,17 +84,26 @@ type WizardDraft = {
   memoryNew: string
   cloudInitUserDataNew: string
   selectedTemplateId: string | null
+  templateBootDiskSizeGib: string
+  templateCores: string
+  templateMemoryGib: string
+  templateRunStrategy: string
+  templateSubnetId: string
+  templateSecurityGroupsRaw: string
+  templateSshPublicKey: string
+  templateUserData: string
+  templateImageSourceType: string
+  templateImageSourceRef: string
+  templateAdditionalDisksGibRaw: string
   templateVmName: string
-  headless: boolean
-  guestLogAccess: boolean
-  logDeletion: boolean
   cloneSourceVmId: string | null
   cloneNewName: string
   startAfterCreate: boolean
 }
 
 const INITIAL_DRAFT: WizardDraft = {
-  mode: 'new',
+  // WIZARD_TEMPLATE_ONLY: was `mode: 'new'` — RESTORE when deployment picker returns.
+  mode: 'template',
   osFamilyNew: '',
   osTypeNew: '',
   bootSource: null,
@@ -39,17 +111,27 @@ const INITIAL_DRAFT: WizardDraft = {
   memoryNew: '4',
   cloudInitUserDataNew: '',
   selectedTemplateId: null,
+  templateBootDiskSizeGib: '',
+  templateCores: '',
+  templateMemoryGib: '',
+  templateRunStrategy: 'Always',
+  templateSubnetId: '',
+  templateSecurityGroupsRaw: '',
+  templateSshPublicKey: '',
+  templateUserData: '',
+  templateImageSourceType: '',
+  templateImageSourceRef: '',
+  templateAdditionalDisksGibRaw: '',
   templateVmName: '',
-  headless: false,
-  guestLogAccess: true,
-  logDeletion: true,
   cloneSourceVmId: null,
   cloneNewName: '',
   startAfterCreate: true,
 }
 
 function mergeWizardDraft(base: WizardDraft, patch?: Partial<WizardDraft>): WizardDraft {
-  return { ...INITIAL_DRAFT, ...base, ...(patch ?? {}) }
+  const d = { ...INITIAL_DRAFT, ...base, ...(patch ?? {}) }
+  d.templateRunStrategy = normalizeRunStrategyWire(d.templateRunStrategy?.trim()) ?? 'Always'
+  return d
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -63,6 +145,12 @@ const STEP_LABELS: Record<string, string> = {
   review: 'Review',
 }
 
+function orderedStepIds(_mode: DeploymentMode, _skipDeployment: boolean): string[] {
+  return ['template', 'customization', 'review']
+}
+
+/*
+RESTORE when fulfillment supports new + clone (keep in sync with frontend stepIds.ts):
 function orderedStepIds(mode: DeploymentMode, skipDeployment: boolean): string[] {
   if (skipDeployment && mode === 'template') return ['template', 'customization', 'review']
   if (skipDeployment && mode === 'clone') return ['clone-source', 'review']
@@ -71,6 +159,7 @@ function orderedStepIds(mode: DeploymentMode, skipDeployment: boolean): string[]
   if (mode === 'template') return ['deployment', 'template', 'customization', 'review']
   return ['deployment', 'clone-source', 'review']
 }
+*/
 
 interface WizardSession {
   draft: WizardDraft
@@ -132,8 +221,23 @@ function validateStep(stepId: string, draft: WizardDraft, vms: ComputeInstance[]
       break
     }
     case 'customization':
-      if (draft.mode === 'template' && !draft.templateVmName?.trim()) {
-        e.templateVmName = 'Virtual machine name is required'
+      if (draft.mode === 'template') {
+        if (!draft.templateVmName?.trim()) {
+          e.templateVmName = 'Virtual machine name is required'
+        }
+        if (parseTemplateBootDiskGibInput(draft.templateBootDiskSizeGib ?? '') === null) {
+          e.templateBootDiskSizeGib = `Boot disk size must be an integer ${TEMPLATE_BOOT_DISK_MIN_GIB}–${TEMPLATE_BOOT_DISK_MAX_GIB} GiB`
+        }
+        if (parseTemplateCoresInput(draft.templateCores ?? '') === null) {
+          e.templateCores = `vCPU must be an integer ${TEMPLATE_CORES_MIN}–${TEMPLATE_CORES_MAX}`
+        }
+        if (parseTemplateMemoryGibInput(draft.templateMemoryGib ?? '') === null) {
+          e.templateMemoryGib = `Memory must be an integer ${TEMPLATE_MEMORY_GIB_MIN}–${TEMPLATE_MEMORY_GIB_MAX} GiB`
+        }
+        if (parseTemplateAdditionalDisksGibInput(draft.templateAdditionalDisksGibRaw ?? '') === null) {
+          e.templateAdditionalDisksGibRaw =
+            `Additional disks must be empty or comma-separated integers ${TEMPLATE_BOOT_DISK_MIN_GIB}–${TEMPLATE_BOOT_DISK_MAX_GIB} GiB each`
+        }
       }
       break
     case 'review':
@@ -158,6 +262,8 @@ function buildVmFromDraft(draft: WizardDraft, vms: ComputeInstance[]): ComputeIn
   const id = `vm-created-${now}`
   const osMap: Record<string, OsType> = { rhel: 'rhel', linux: 'linux', windows: 'windows' }
 
+  /*
+  RESTORE clone path when fulfillment supports it:
   if (draft.mode === 'clone') {
     const src = vms.find((v) => v.id === draft.cloneSourceVmId)
     return {
@@ -172,20 +278,57 @@ function buildVmFromDraft(draft: WizardDraft, vms: ComputeInstance[]): ComputeIn
       createdAtMs: now,
     } as ComputeInstance
   }
+  */
 
   if (draft.mode === 'template') {
     const tpl = VM_TEMPLATES.find((t) => t.id === draft.selectedTemplateId)
+    const bootGib =
+      parseTemplateBootDiskGibInput(draft.templateBootDiskSizeGib ?? '') ??
+      tpl?.defaultBootDiskSizeGib ??
+      40
+    const cores = parseTemplateCoresInput(draft.templateCores ?? '') ?? tpl?.defaultCores ?? 2
+    const memoryGib = parseTemplateMemoryGibInput(draft.templateMemoryGib ?? '') ?? tpl?.defaultMemoryGib ?? 8
+    const runStrategy = normalizeRunStrategyWire(draft.templateRunStrategy?.trim()) ?? 'Always'
+    const templateId = draft.selectedTemplateId ?? tpl?.id ?? ''
+
+    const spec: ComputeInstance['spec'] = {
+      template: templateId,
+      cores,
+      memoryGib,
+      bootDisk: { size_gib: bootGib },
+      runStrategy,
+    }
+
+    const userData = draft.templateUserData?.trim()
+    if (userData) spec.userData = userData
+
+    const sshKey = draft.templateSshPublicKey?.trim()
+    if (sshKey) spec.sshKey = sshKey
+
+    const subnet = draft.templateSubnetId?.trim()
+    if (subnet) spec.subnet = subnet
+
+    const securityGroups = parseTemplateSecurityGroupsInput(draft.templateSecurityGroupsRaw ?? '')
+    if (securityGroups.length) spec.securityGroups = securityGroups
+
+    const extraDisks = parseTemplateAdditionalDisksGibInput(draft.templateAdditionalDisksGibRaw ?? '')
+    if (extraDisks?.length) {
+      spec.additionalDisks = extraDisks.map((size_gib) => ({ size_gib }))
+    }
+
+    const imgType = draft.templateImageSourceType?.trim()
+    const imgRef = draft.templateImageSourceRef?.trim()
+    if (imgType && imgRef) {
+      spec.image = { source_type: imgType, source_ref: imgRef }
+    }
+
     return {
       id,
       metadata: {
         name: draft.templateVmName.trim() || `${tpl?.id ?? 'vm'}-instance`,
         createdAt: new Date().toISOString(),
       },
-      spec: {
-        template: tpl?.id,
-        cores: tpl?.defaultCores ?? 2,
-        memoryGib: tpl?.defaultMemoryGib ?? 8,
-      },
+      spec,
       status: { state: draft.startAfterCreate ? 'running' : 'stopped' },
       os: osMap[tpl?.icon ?? 'linux'] ?? 'linux',
       description: tpl?.description,
@@ -193,6 +336,8 @@ function buildVmFromDraft(draft: WizardDraft, vms: ComputeInstance[]): ComputeIn
     } as ComputeInstance
   }
 
+  /*
+  RESTORE "new VM from scratch" path when fulfillment supports it:
   const userData = draft.cloudInitUserDataNew?.trim()
   return {
     id,
@@ -209,6 +354,12 @@ function buildVmFromDraft(draft: WizardDraft, vms: ComputeInstance[]): ComputeIn
     os: osMap[draft.osFamilyNew] ?? 'linux',
     createdAtMs: now,
   } as ComputeInstance
+  */
+
+  void vms
+  throw new Error(
+    `WIZARD_TEMPLATE_ONLY: unsupported draft.mode ${draft.mode} (only template is active)`,
+  )
 }
 
 export async function registerCreateVmWizardRoutes(app: FastifyInstance) {
@@ -231,10 +382,19 @@ export async function registerCreateVmWizardRoutes(app: FastifyInstance) {
         ...INITIAL_DRAFT,
         mode: 'template',
         selectedTemplateId: body.presetTemplateId,
+        /** UI seeds from fulfillment-backed `compute_instance_templates` (spec_defaults.boot_disk); mock VM_TEMPLATES ids may not match upstream. */
+        templateBootDiskSizeGib: '',
       }
       skipDeployment = true
       activeIndex = 0
-    } else if (entry === 'clone_drawer' && body.presetCloneSourceVmId) {
+    } else if (entry === 'clone_drawer') {
+      return reply.status(503).send({
+        error: 'Clone wizard path is disabled until fulfillment supports it.',
+      })
+    }
+    /*
+    RESTORE clone_drawer session bootstrap:
+    else if (entry === 'clone_drawer' && body.presetCloneSourceVmId) {
       const src = Array.from(vmStore.values()).find((v) => v.id === body.presetCloneSourceVmId)
       draft = {
         ...INITIAL_DRAFT,
@@ -244,8 +404,28 @@ export async function registerCreateVmWizardRoutes(app: FastifyInstance) {
       }
       skipDeployment = true
       activeIndex = 0
-    } else if (body.deploymentMethod) {
+    }
+    */
+    else if (body.deploymentMethod) {
+      return reply.status(503).send({
+        error: 'Non-template deployment methods are disabled until fulfillment supports them.',
+      })
+    }
+    /*
+    RESTORE deploymentMethod branch:
+    else if (body.deploymentMethod) {
       draft = { ...INITIAL_DRAFT, mode: body.deploymentMethod }
+    }
+    */
+    else {
+      draft = {
+        ...INITIAL_DRAFT,
+        mode: 'template',
+        selectedTemplateId: null,
+        templateBootDiskSizeGib: '',
+      }
+      skipDeployment = true
+      activeIndex = 0
     }
 
     const session: WizardSession = { draft, skipDeployment, activeIndex, entry }

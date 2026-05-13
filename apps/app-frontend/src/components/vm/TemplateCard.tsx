@@ -52,7 +52,8 @@ function OsIcon({ icon }: { icon?: string }) {
 export function TemplateCard({ template }: TemplateCardProps) {
   const cpu = `${template.defaultCores ?? 2} vCPU`
   const memory = `${template.defaultMemoryGib ?? 8} GiB`
-  const storage = 'Boot volume'
+  const diskGib = template.defaultBootDiskSizeGib ?? 40
+  const storage = `${diskGib} GiB`
   const workload = workloadLabel(template)
   const subtitle = subtitleForTemplate(template)
 

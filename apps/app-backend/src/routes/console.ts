@@ -1,18 +1,21 @@
 /** Mock console access — GET /api/osac/public/v1/console/:resourceType/:resourceId/access */
 import type { FastifyInstance } from 'fastify'
+import type { FulfillmentProxyRouteConfig } from './fulfillmentProxyConfig.js'
 import { proxyToUpstream } from './upstreamProxy.js'
 
-interface RouteConfig {
-  apiMode: string
-  fulfillmentApiUrl?: string
-}
-
-export async function registerConsoleRoutes(app: FastifyInstance, config: RouteConfig) {
-  const { apiMode, fulfillmentApiUrl } = config
+export async function registerConsoleRoutes(
+  app: FastifyInstance,
+  config: FulfillmentProxyRouteConfig,
+) {
+  const { apiMode, fulfillmentApiUrl, fulfillmentFetch, tempFulfillmentStaticBearer } = config
 
   if (apiMode === 'dev' && fulfillmentApiUrl) {
+    // Same proxy workarounds as fulfillment (see upstreamProxy.ts — OSAC_WORKAROUND_REMOVE).
     app.all('/api/osac/public/v1/*', async (req, reply) => {
-      await proxyToUpstream(req, reply, fulfillmentApiUrl)
+      await proxyToUpstream(req, reply, fulfillmentApiUrl, {
+        fetchImpl: fulfillmentFetch,
+        staticBearer: tempFulfillmentStaticBearer,
+      })
     })
     return
   }

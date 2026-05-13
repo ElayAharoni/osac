@@ -1,10 +1,11 @@
 /**
- * BFF fulfillment routes — proxy to FULFILLMENT_API_URL when set; mock otherwise.
+ * BFF fulfillment routes — in OSAC_API_MODE=dev with FULFILLMENT_API_URL, proxy upstream; else mock.
+ * Startup requires FULFILLMENT_API_URL when mode is dev (see assertFulfillmentDevReady in index.ts).
  *
  * Mock paths:
  *   GET  /api/fulfillment/v1/capabilities           → mock capabilities
- *   GET  /api/fulfillment/v1/cluster_templates       → mock template list
- *   GET  /api/fulfillment/v1/cluster_templates/:id   → mock template detail
+ *   GET  /api/fulfillment/v1/compute_instance_templates     → mock VM template list
+ *   GET  /api/fulfillment/v1/compute_instance_templates/:id → mock VM template detail
  *   GET  /api/fulfillment/v1/compute_instances       → mock VM list
  *   GET  /api/fulfillment/v1/compute_instances/:id   → mock VM detail
  *   POST /api/fulfillment/v1/compute_instances       → mock VM create
@@ -16,25 +17,51 @@
  *   GET  /api/fulfillment/v1/subnets                 → mock subnet list
  *   GET  /api/fulfillment/v1/security_groups         → mock SG list
  */
-import type { FastifyInstance } from 'fastify'
-import { VM_TEMPLATES, DEMO_ORGANIZATIONS } from '@osac/api-contracts'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
+import { VM_TEMPLATES, DEMO_ORGANIZATIONS, normalizeComputeInstance } from '@osac/api-contracts'
 import type { ComputeInstance } from '@osac/api-contracts'
 import { vmStore } from '../mock-vm-store.js'
+import type { FulfillmentProxyRouteConfig } from './fulfillmentProxyConfig.js'
 import { proxyToUpstream } from './upstreamProxy.js'
 
-interface RouteConfig {
-  apiMode: string
-  fulfillmentApiUrl?: string
+function asNestedRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-export async function registerFulfillmentRoutes(app: FastifyInstance, config: RouteConfig) {
-  const { apiMode, fulfillmentApiUrl } = config
+function vmTemplatesListPage(req: FastifyRequest): {
+  size: number
+  total: number
+  items: typeof VM_TEMPLATES
+} {
+  const query = req.query as { filter?: string; limit?: string; offset?: string }
+  const limit = parseInt(query.limit ?? '50', 10)
+  const offset = parseInt(query.offset ?? '0', 10)
+  const filter = query.filter?.toLowerCase() ?? ''
+  const filtered = filter
+    ? VM_TEMPLATES.filter(
+        (t) =>
+          t.title.toLowerCase().includes(filter) ||
+          (t.description ?? '').toLowerCase().includes(filter),
+      )
+    : VM_TEMPLATES
+  const page = filtered.slice(offset, offset + limit)
+  return { size: page.length, total: filtered.length, items: page }
+}
+
+export async function registerFulfillmentRoutes(
+  app: FastifyInstance,
+  config: FulfillmentProxyRouteConfig,
+) {
+  const { apiMode, fulfillmentApiUrl, fulfillmentFetch, tempFulfillmentStaticBearer } = config
   const prefix = '/api/fulfillment/v1'
 
   if (apiMode === 'dev' && fulfillmentApiUrl) {
-    // In dev mode, forward requests to upstream (streaming-safe passthrough).
+    // Dev upstream proxy (see upstreamProxy.ts for OSAC_WORKAROUND_REMOVE: buffer body, static bearer, etc.).
     app.all(`${prefix}/*`, async (req, reply) => {
-      await proxyToUpstream(req, reply, fulfillmentApiUrl)
+      await proxyToUpstream(req, reply, fulfillmentApiUrl, {
+        fetchImpl: fulfillmentFetch,
+        staticBearer: tempFulfillmentStaticBearer,
+      })
     })
     return
   }
@@ -49,31 +76,13 @@ export async function registerFulfillmentRoutes(app: FastifyInstance, config: Ro
     },
   }))
 
-  app.get(`${prefix}/cluster_templates`, async (req) => {
-    const query = req.query as { filter?: string; limit?: string; offset?: string }
-    const limit = parseInt(query.limit ?? '50', 10)
-    const offset = parseInt(query.offset ?? '0', 10)
-    const filter = query.filter?.toLowerCase() ?? ''
-    const filtered = filter
-      ? VM_TEMPLATES.filter(
-          (t) =>
-            t.title.toLowerCase().includes(filter) ||
-            (t.description ?? '').toLowerCase().includes(filter),
-        )
-      : VM_TEMPLATES
-    const page = filtered.slice(offset, offset + limit)
-    return { size: page.length, total: filtered.length, items: page }
-  })
+  app.get(`${prefix}/compute_instance_templates`, async (req) => vmTemplatesListPage(req))
 
-  app.get(`${prefix}/cluster_templates/:id`, async (req, reply) => {
+  app.get(`${prefix}/compute_instance_templates/:id`, async (req, reply) => {
     const { id } = req.params as { id: string }
     const tpl = VM_TEMPLATES.find((t) => t.id === id)
     if (!tpl) return reply.status(404).send({ error: 'Not found' })
     return tpl
-  })
-
-  app.get(`${prefix}/compute_instance_templates`, async () => {
-    return { size: VM_TEMPLATES.length, total: VM_TEMPLATES.length, items: VM_TEMPLATES }
   })
 
   app.get(`${prefix}/compute_instances`, async (req) => {
@@ -101,14 +110,27 @@ export async function registerFulfillmentRoutes(app: FastifyInstance, config: Ro
   })
 
   app.post(`${prefix}/compute_instances`, async (req, reply) => {
-    const body = req.body as { object?: ComputeInstance }
-    if (!body?.object) return reply.status(400).send({ error: 'Missing object' })
-    const vm: ComputeInstance = {
-      ...body.object,
+    const body = req.body as Record<string, unknown> | undefined
+    if (!body || typeof body !== 'object') return reply.status(400).send({ error: 'Missing body' })
+    /** Match live gateway: bare ComputeInstance JSON. Accept legacy `{ object }` for older clients/tests. */
+    const incoming =
+      'object' in body && body.object && typeof body.object === 'object'
+        ? (body.object as Record<string, unknown>)
+        : body
+    const merged = {
+      ...incoming,
       id: `vm-created-${Date.now()}`,
-      status: { state: 'starting' },
-      metadata: { ...body.object.metadata, createdAt: new Date().toISOString() },
+      metadata: {
+        ...asNestedRecord(incoming.metadata),
+        creation_timestamp: new Date().toISOString(),
+      },
+      spec: { ...asNestedRecord(incoming.spec) },
+      status: {
+        state: 'COMPUTE_INSTANCE_STATE_STARTING',
+        ...asNestedRecord(incoming.status),
+      },
     }
+    const vm = normalizeComputeInstance(merged)
     vmStore.set(vm.id, vm)
     return { object: vm }
   })
@@ -118,13 +140,14 @@ export async function registerFulfillmentRoutes(app: FastifyInstance, config: Ro
     const existing = vmStore.get(id)
     if (!existing) return reply.status(404).send({ error: 'Not found' })
     const body = req.body as Partial<ComputeInstance>
-    const updated: ComputeInstance = {
+    const merged = {
       ...existing,
       ...body,
       spec: { ...existing.spec, ...(body.spec ?? {}) },
       status: { ...existing.status, ...(body.status ?? {}) },
       metadata: { ...existing.metadata, ...(body.metadata ?? {}) },
     }
+    const updated = normalizeComputeInstance(merged as unknown)
     vmStore.set(id, updated)
     return { object: updated }
   })

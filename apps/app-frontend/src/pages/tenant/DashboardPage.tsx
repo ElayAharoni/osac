@@ -2,7 +2,7 @@
  * flow: tenant-user-dashboard
  * step: tud_dashboard_home
  */
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
@@ -16,18 +16,14 @@ import {
   PageSection,
   Title,
 } from '@patternfly/react-core'
-import {
-  DEMO_TENANT_DISPLAY_USER,
-  DEMO_VM_POWER_COUNTS,
-  demoVmPowerTotal,
-} from '@osac/api-contracts'
-import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
+import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
+import { DEMO_TENANT_DISPLAY_USER } from '@osac/api-contracts'
+import type { CreateVmWizardHandle, DeploymentMode } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
 import { PageHeader } from '../../components/layout'
 import { DashboardUtilizationSection, DashboardQuotaSection } from '../../components/dashboard'
 import { useSession } from '../../contexts/SessionContext'
 import { useComputeInstances, useProvisionVm } from '../../api/hooks'
-import type { VmPowerState } from '@osac/api-contracts'
 
 interface StatCard {
   key: string
@@ -45,25 +41,35 @@ export function DashboardPage() {
   const { data: vms = [] } = useComputeInstances()
   const provisionVm = useProvisionVm()
 
+  const handleWizardProvision = useCallback(
+    (vm: ComputeInstance, meta: { mode: DeploymentMode }) => {
+      provisionVm.mutate({ vm, specTemplateOnly: meta.mode === 'template' })
+    },
+    [provisionVm],
+  )
+
   const tenant = selectedTenant ?? 'northstar'
   const displayName = selectedTenant ? DEMO_TENANT_DISPLAY_USER[selectedTenant] : ''
-  const counts =
-    selectedTenant && selectedTenant !== 'vertexa'
-      ? DEMO_VM_POWER_COUNTS[selectedTenant]
-      : { running: 0, paused: 0, stopped: 0 }
-  const total =
-    selectedTenant && selectedTenant !== 'vertexa' ? demoVmPowerTotal(selectedTenant) : 0
+
+  /** KPIs from normalized GET compute_instances (spec: starting/deleting/error count in All only). */
+  const powerCounts = useMemo(() => {
+    let running = 0
+    let paused = 0
+    let stopped = 0
+    for (const v of vms) {
+      const s = v.status.state
+      if (s === 'running') running++
+      else if (s === 'paused') paused++
+      else if (s === 'stopped') stopped++
+    }
+    return { running, paused, stopped, all: vms.length }
+  }, [vms])
 
   const stats: StatCard[] = [
     {
       key: 'all-vms',
       label: 'All VMs',
-      value:
-        total +
-        vms.filter(
-          (v) =>
-            v.metadata.name.startsWith('vm-clone-') || v.metadata.name.startsWith('vm-created-'),
-        ).length,
+      value: powerCounts.all,
       valueColor: 'var(--pf-t--global--text--color--regular)',
       caption: 'Total VMs across your workspaces',
       powerFilter: null,
@@ -71,7 +77,7 @@ export function DashboardPage() {
     {
       key: 'running',
       label: 'Running',
-      value: counts.running,
+      value: powerCounts.running,
       valueColor: 'var(--pf-t--global--color--status--success--default)',
       caption: 'On and ready for workloads',
       powerFilter: 'running',
@@ -79,7 +85,7 @@ export function DashboardPage() {
     {
       key: 'paused',
       label: 'Paused',
-      value: counts.paused,
+      value: powerCounts.paused,
       valueColor: 'var(--pf-t--global--color--status--warning--default)',
       caption: 'Suspended with memory and disks retained',
       powerFilter: 'paused',
@@ -87,7 +93,7 @@ export function DashboardPage() {
     {
       key: 'stopped',
       label: 'Stopped',
-      value: counts.stopped,
+      value: powerCounts.stopped,
       valueColor: 'var(--pf-t--global--color--status--danger--default)',
       caption: 'Powered off — storage may still incur cost',
       powerFilter: 'stopped',
@@ -112,7 +118,7 @@ export function DashboardPage() {
         ref={wizardRef}
         existingVms={vms}
         tenant={tenant !== 'vertexa' ? tenant : 'northstar'}
-        onProvision={(vm) => provisionVm.mutate(vm)}
+        onProvision={handleWizardProvision}
       />
 
       <PageHeader

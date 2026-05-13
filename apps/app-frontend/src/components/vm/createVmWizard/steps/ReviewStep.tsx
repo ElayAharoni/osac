@@ -11,15 +11,25 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { ComputeInstance } from '@osac/api-contracts'
-import { VM_TEMPLATES } from '@osac/api-contracts'
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useComputeInstanceTemplates } from '../../../../api/hooks'
+import {
+  parseTemplateAdditionalDisksGibInput,
+  parseTemplateBootDiskGibInput,
+  parseTemplateCoresInput,
+  parseTemplateMemoryGibInput,
+  parseTemplateSecurityGroupsInput,
+} from '../constants'
 import type { UpdateFn, WizardState } from '../types'
 
+/*
+RESTORE for "new" path review:
 function bootSourceSummary(bootSource: WizardState['bootSource']): string {
   if (bootSource === 'volume') return 'Boot volume'
   if (bootSource === 'none') return 'No boot source'
   return '—'
 }
+*/
 
 export function ReviewStep({
   state,
@@ -30,10 +40,25 @@ export function ReviewStep({
   update: UpdateFn
   vms?: ComputeInstance[]
 }) {
-  const tpl = state.selectedTemplateId
-    ? VM_TEMPLATES.find((t) => t.id === state.selectedTemplateId)
-    : null
+  void vms
+  const { data: templates = [] } = useComputeInstanceTemplates()
+  const tpl = useMemo(
+    () =>
+      state.selectedTemplateId
+        ? templates.find((t) => t.id === state.selectedTemplateId) ?? null
+        : null,
+    [templates, state.selectedTemplateId],
+  )
+  /*
+  RESTORE for clone review:
   const sourceVm = state.cloneSourceVmId ? vms.find((vm) => vm.id === state.cloneSourceVmId) ?? null : null
+  */
+
+  const templateBootDiskGib = parseTemplateBootDiskGibInput(state.templateBootDiskSizeGib)
+  const templateCores = parseTemplateCoresInput(state.templateCores)
+  const templateMemoryGib = parseTemplateMemoryGibInput(state.templateMemoryGib)
+  const additionalDisks = parseTemplateAdditionalDisksGibInput(state.templateAdditionalDisksGibRaw)
+  const securityGroups = parseTemplateSecurityGroupsInput(state.templateSecurityGroupsRaw)
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
@@ -67,82 +92,96 @@ export function ReviewStep({
             <DescriptionListDescription>{state.templateVmName || '—'}</DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
-            <DescriptionListTerm>CPU</DescriptionListTerm>
-            <DescriptionListDescription>{tpl ? `${tpl.defaultCores} vCPU` : '—'}</DescriptionListDescription>
+            <DescriptionListTerm>vCPU</DescriptionListTerm>
+            <DescriptionListDescription>
+              {templateCores != null ? String(templateCores) : '—'}
+            </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
             <DescriptionListTerm>Memory</DescriptionListTerm>
             <DescriptionListDescription>
-              {tpl ? `${tpl.defaultMemoryGib} GiB` : '—'}
+              {templateMemoryGib != null ? `${templateMemoryGib} GiB` : '—'}
             </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
-            <DescriptionListTerm>Storage</DescriptionListTerm>
-            <DescriptionListDescription>40 GiB root volume (demo default)</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Network</DescriptionListTerm>
-            <DescriptionListDescription>Default pod network</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Headless mode</DescriptionListTerm>
-            <DescriptionListDescription>{state.headless ? 'On' : 'Off'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Guest system log access</DescriptionListTerm>
-            <DescriptionListDescription>{state.guestLogAccess ? 'On' : 'Off'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Deletion protection</DescriptionListTerm>
-            <DescriptionListDescription>{state.logDeletion ? 'On' : 'Off'}</DescriptionListDescription>
+            <DescriptionListTerm>Run strategy</DescriptionListTerm>
+            <DescriptionListDescription>{state.templateRunStrategy || '—'}</DescriptionListDescription>
           </DescriptionListGroup>
         </DescriptionList>
       )}
       {renderSection(
         'template-storage',
         'Storage',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          No additional storage settings are configured in this demo.
-        </Content>
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Boot disk size</DescriptionListTerm>
+            <DescriptionListDescription>
+              {templateBootDiskGib != null ? `${templateBootDiskGib} GiB` : '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Additional disks</DescriptionListTerm>
+            <DescriptionListDescription>
+              {additionalDisks && additionalDisks.length
+                ? additionalDisks.map((g) => `${g} GiB`).join(', ')
+                : 'None'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
       )}
       {renderSection(
         'template-network',
         'Network',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          Default pod network is selected in this demo.
-        </Content>
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Subnet</DescriptionListTerm>
+            <DescriptionListDescription>{state.templateSubnetId.trim() || '—'}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Security groups</DescriptionListTerm>
+            <DescriptionListDescription>
+              {securityGroups.length ? securityGroups.join(', ') : '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
       )}
       {renderSection(
         'template-ssh',
         'SSH',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          SSH key management is not modeled in this demo.
-        </Content>
-      )}
-      {renderSection(
-        'template-scheduling',
-        'Scheduling',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          Scheduling preferences are not modeled in this demo.
-        </Content>
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>SSH public key</DescriptionListTerm>
+            <DescriptionListDescription>
+              {state.templateSshPublicKey.trim() ? 'Provided' : 'None'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
       )}
       {renderSection(
         'template-initial-run',
-        'Initial run',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          Initial run customization is not modeled in this demo.
-        </Content>
-      )}
-      {renderSection(
-        'template-metadata',
-        'Metadata',
-        <Content component="p" className="pf-v6-u-color-text-subtle">
-          Metadata labels and annotations are not modeled in this demo.
-        </Content>
+        'Image & user data',
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Image</DescriptionListTerm>
+            <DescriptionListDescription>
+              {state.templateImageSourceType.trim() && state.templateImageSourceRef.trim()
+                ? `${state.templateImageSourceType} — ${state.templateImageSourceRef}`
+                : '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>User data</DescriptionListTerm>
+            <DescriptionListDescription>
+              {state.templateUserData.trim() ? 'Provided' : 'None'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
       )}
     </>
   )
 
+  /*
+  WIZARD_TEMPLATE_ONLY — RESTORE when "new" path returns:
   const renderNewSummary = () => (
     <DescriptionList isCompact aria-labelledby="review-heading">
       <DescriptionListGroup>
@@ -167,149 +206,12 @@ export function ReviewStep({
       </DescriptionListGroup>
     </DescriptionList>
   )
+  */
 
-  const renderCloneSections = () => (
-    <>
-      {renderSection(
-        'clone-overview',
-        'Overview',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Deployment</DescriptionListTerm>
-            <DescriptionListDescription>Clone</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>New virtual machine name</DescriptionListTerm>
-            <DescriptionListDescription>{state.cloneNewName || '—'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Source virtual machine</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.metadata.name ?? state.cloneSourceVmId ?? '—'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>CPU</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.cores ? `${sourceVm.spec.cores} vCPU` : '—'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Memory</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.memoryGib ? `${sourceVm.spec.memoryGib} GiB` : '—'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Storage</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.bootDisk || sourceVm?.spec.additionalDisks?.length
-                ? `Boot disk plus ${sourceVm.spec.additionalDisks?.length ?? 0} additional disk(s)`
-                : 'No storage details available'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Network</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.spec.subnet ?? 'Default network'}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>
-      )}
-      {renderSection(
-        'clone-storage',
-        'Storage',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Boot disk</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.bootDisk ? 'Present' : 'Not specified'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Additional disks</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.spec.additionalDisks?.length ?? 0}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-      {renderSection(
-        'clone-network',
-        'Network',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Subnet</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.spec.subnet ?? 'Default network'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Security groups</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.securityGroups?.length
-                ? sourceVm.spec.securityGroups.join(', ')
-                : 'None specified'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>IP address</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.status.ipAddress ?? '—'}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-      {renderSection(
-        'clone-ssh',
-        'SSH',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>SSH key</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.sshKey ? 'Configured on source VM' : 'Not configured'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-      {renderSection(
-        'clone-scheduling',
-        'Scheduling',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Run strategy</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.spec.runStrategy ?? 'Not specified'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Current power state</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.status.state ?? '—'}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-      {renderSection(
-        'clone-initial-run',
-        'Initial run',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>User data</DescriptionListTerm>
-            <DescriptionListDescription>
-              {sourceVm?.spec.userData ? 'Provided on source VM' : 'None'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-      {renderSection(
-        'clone-metadata',
-        'Metadata',
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Source VM ID</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.id ?? state.cloneSourceVmId ?? '—'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Source VM name</DescriptionListTerm>
-            <DescriptionListDescription>{sourceVm?.metadata.name ?? '—'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Labels</DescriptionListTerm>
-            <DescriptionListDescription>{Object.keys(sourceVm?.metadata.labels ?? {}).length}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>,
-      )}
-    </>
-  )
+  /*
+  WIZARD_TEMPLATE_ONLY — RESTORE when clone path returns (needs `const sourceVm = …` above).
+  Full JSX: recover from git history before this change (search "clone-overview" in this file).
+  */
 
   return (
     <Stack hasGutter>
@@ -334,6 +236,8 @@ export function ReviewStep({
         />
       </StackItem>
       <StackItem>
+        {/*
+        WIZARD_TEMPLATE_ONLY — RESTORE when new + clone return:
         {state.mode === 'new' ? (
           renderNewSummary()
         ) : (
@@ -342,6 +246,8 @@ export function ReviewStep({
             {state.mode === 'clone' && renderCloneSections()}
           </Stack>
         )}
+        */}
+        {renderTemplateSections()}
       </StackItem>
     </Stack>
   )

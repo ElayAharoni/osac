@@ -6,7 +6,12 @@ export interface Metadata {
   name: string
   version?: number
   labels?: Record<string, string>
+  /** RFC3339 — mapped from wire `creation_timestamp`. */
   createdAt?: string
+  /** Wire: creators[] */
+  creators?: string[]
+  /** Tenancy scope from upstream */
+  tenants?: string[]
 }
 
 export interface PageOfT<T> {
@@ -30,12 +35,14 @@ export type VmPowerState = 'running' | 'stopped' | 'paused' | 'starting' | 'dele
 
 export interface ComputeInstanceSpec {
   template?: string
+  /** Template param values (ProtoJSON Any map). The create-from-template wizard does not populate this; use top-level `spec` fields instead. */
   templateParameters?: Record<string, unknown>
   cores?: number
   memoryGib?: number
   image?: Record<string, unknown>
   bootDisk?: Record<string, unknown>
   additionalDisks?: Record<string, unknown>[]
+  /** Fulfillment `run_strategy`: `Always` | `Halted` on REST wire; legacy `RUN_STRATEGY_*` strings are normalized on read. */
   runStrategy?: string
   sshKey?: string
   userData?: string
@@ -44,9 +51,19 @@ export interface ComputeInstanceSpec {
   restartRequestedAt?: string
 }
 
+export interface ComputeInstanceCondition {
+  type: string
+  /** Wire may carry CONDITION_STATUS_*; UI formats via formatConditionStatusForDisplay */
+  status: string
+  reason?: string
+  message?: string
+  /** Mapped from wire last_transition_time */
+  lastTransitionTime?: string
+}
+
 export interface ComputeInstanceStatus {
   state: VmPowerState
-  conditions?: { type: string; status: string; message?: string }[]
+  conditions?: ComputeInstanceCondition[]
   ipAddress?: string
   lastRestartedAt?: string
 }
@@ -89,6 +106,8 @@ export interface ClusterTemplate extends ClusterTemplateSummary {
   /** Demo defaults for card summary and BFF template finalize spec.cores / memoryGib. */
   defaultCores?: number
   defaultMemoryGib?: number
+  /** From fulfillment **defaults** / **spec_defaults**.boot_disk.size_gib (GiB) for cards and wizard boot disk default. */
+  defaultBootDiskSizeGib?: number
   tags?: string[]
   /** OS family for icon + filter: rhel | windows | linux */
   icon?: string
