@@ -1,11 +1,27 @@
 flow: Create virtual machine wizard
 statechart_ref: ../statecharts/create-virtual-machine-wizard.statechart.yaml
 
+template_inventory_alignment:
+  normative_spec: ../template-catalog-wizard-api-alignment.yaml
+  rule: >-
+    The **template** wizard step MUST NOT use embedded **VM_TEMPLATES** from @osac/api-contracts as the sole source for picker cards.
+    It MUST reuse the same **compute_instance_templates** client + TanStack Query as **vm-template-catalog** (CatalogPage).
+
 applies_when: >-
   Authenticated tenant user or tenant admin workspace. Wizard is always a Modal layered over the
   current route; wizard progress is not represented in the URL (no path segment or query param for
   step index). Step order, validation, and persistence of the in-progress draft are orchestrated by
   the OSAC BFF create-vm-wizard session API (see backend-fulfillment.yaml bff_demo_osac_extensions).
+
+current_product_note_wizard_template_only: >-
+  Shipped demo wizard is **template-only**: ordered steps **template → customization → review** (no deployment
+  picker). Multi-path worksheets below remain for RESTORE when new/clone return. Template customization
+  maps draft fields to fulfillment **ComputeInstance.spec** top-level keys (e.g. cores, memory_gib, boot_disk,
+  additional_disks, run_strategy **Always** | **Halted**, subnet, security_groups, ssh_key, user_data, optional
+  image)—the wizard does **not** populate **template_parameters** for this path. After BFF finalize returns the
+  built **ComputeInstance**, the SPA issues **POST /api/fulfillment/v1/compute_instances** (same handler from
+  Dashboard, Catalog, and My VMs) when talking to real fulfillment; mock BFF finalize still appends to the
+  in-memory VM store. **GET** list polling for compute instances does not replace or cancel that POST.
 
 terminology:
   wizard_chrome: >-
@@ -18,10 +34,10 @@ terminology:
   bff_step_orchestration: >-
     Opening the modal creates a BFF wizard session. Advancing (Next), moving back (Back), and
     finalizing (Create virtual machine) call the BFF; the BFF validates the current step, updates a
-    server-held draft, returns structured errors on failure, and on finalize creates the compute
-    instance (mock in-memory store or proxied fulfillment when integrated). Client may optimistically
-    disable Next but must treat BFF responses as authoritative for step transitions and review summary.
-    POST /advance body includes fromStepId and draft (full WizardState-shaped object merged server-side).
+    server-held draft, returns structured errors on failure, and on finalize builds the **ComputeInstance**
+    (mock: persists to vmStore). The SPA then **POST**s that object to fulfillment when integrated.
+    Client may optimistically disable Next but must treat BFF responses as authoritative for step transitions
+    and review summary. POST /advance body includes fromStepId and draft (full WizardState-shaped object merged server-side).
   ephemeral_wizard_routing: >-
     No SPA route or bookmark encodes wizard state; closing the modal or calling session DELETE
     abandons the draft. Re-open starts a new session unless a future spec adds recovery.
@@ -138,10 +154,13 @@ step_worksheets:
       toolbar row: OS FormSelect, Workload FormSelect, “Clear filters”
       control, SearchInput. Line showing count of templates after filters (“N template(s) available”) and
       “Select one to continue.” Grid of Cards: OS icon top-left, Radio top-right, title, short description,
-      resource summary from template defaultCores/defaultMemoryGib, Workload Label (High performance /
+      resource summary from template defaults: CPU (**defaults.cores** / normalized defaultCores), Memory (**defaults.memory_gib** / defaultMemoryGib),
+      **Storage** (**defaults.boot_disk.size_gib** GiB — same source as catalog cards; not boot-volume PVC text), then Workload Label (High performance /
       Analytics / Machine learning / Data processing). Layout class `osac-template-cards`. Nav label “Templates”.
     validate_client: Next disabled until selectedTemplateId set.
-    validate_bff: selectedTemplateId required; catalog membership implied by demo static list.
+    validate_bff: >-
+      selectedTemplateId required; id MUST exist in fulfillment-backed template inventory (same contract as catalog —
+      not demo-static VM_TEMPLATES-only membership).
     edge_cases: >-
       Catalog entry with skipDeployment starts on template with template id preset; user may change
       template before advance.
@@ -169,20 +188,27 @@ step_worksheets:
     paths: [new, template]
     operate: >-
       New path: optional cloudInitUserDataNew only (cloud-init YAML or script); merged on advance.
-      Template path: required templateVmName; optional headless, guestLogAccess, logDeletion (deletion
-      protection). Defaults: guestLogAccess and logDeletion true, headless false. BFF finalize for new maps
-      non-empty cloudInitUserDataNew to spec.userData; new VM display name is generated (no hostname field
-      on customization).
+      Template path: required templateVmName; **vCPU** and **memory (GiB)** inputs map to spec.cores / spec.memory_gib
+      (seeded from selected compute_instance_template defaults); **run strategy** select uses wire values **Always**
+      or **Halted**; **boot disk GiB** and optional **comma-separated additional disk sizes** map to spec.boot_disk
+      and spec.additional_disks; optional subnet id, comma-separated security group ids, SSH public key, optional
+      image type + reference, and optional user data map to the matching spec fields. BFF finalize merges the same
+      draft fields into the persisted ComputeInstance for mock mode; non-empty cloudInitUserDataNew on new path maps
+      to spec.userData when that path is RESTOREd.
     look: >-
       Title (h2) “Customization”. New path: intro Content “Optional cloud-init user data. Leave blank to
       use defaults on create.” then Form with “Cloud-init user data (optional)” TextArea only. Template
-      path: intro Content “Customize your virtual machine by exploring the tabs below.”, then Form with
-      required “Virtual machine name” TextInput, then Tabs: Overview (compact DescriptionList rows
-      Template/CPU/Memory/Storage/Network plus three Switches: Headless mode, Guest system log access,
-      Deletion protection); Storage, Network, SSH, Scheduling, Initial run, Metadata (placeholder copy
-      only in demo). Nav label “Customization”.
-    validate_client: Template path Next disabled until templateVmName trimmed non-empty; new path always enabled.
-    validate_bff: templateVmName required when draft.mode template only.
+      path: intro Content describes adjusting compute, storage, networking, and access; Form with required
+      “Virtual machine name”; Tabs — **Overview** (editable vCPU, memory GiB, run strategy), **Storage** (boot
+      disk GiB + optional additional disks), **Network** (subnet, security groups), **SSH** (public key),
+      **Image & user data** (image source + user data). Nav label “Customization”.
+    validate_client: >-
+      Template path Next disabled until templateVmName trimmed non-empty, boot disk GiB is a valid integer within
+      allowed bounds, vCPU and memory GiB parse as valid integers within policy, and additional-disks field is
+      either empty or a valid comma-separated list of GiB sizes.
+    validate_bff: >-
+      templateVmName required when draft.mode template; boot disk GiB, cores, memory GiB, and additional disks
+      format validated before finalize per demo policy.
     edge_cases: Clone path skips this step entirely.
 
   review:
@@ -192,14 +218,17 @@ step_worksheets:
     operate: >-
       Read-only review content varies by flow: new uses compact DescriptionList, while template and
       clone use ExpandableSection + DescriptionList/content. startAfterCreate toggle remains available;
-      primary becomes Create virtual machine; finalize POST sends draft; success closes modal and provisions VM.
+      primary becomes Create virtual machine; finalize POST sends draft to the BFF; on success the modal closes
+      and the SPA calls **POST /api/fulfillment/v1/compute_instances** with the normalized payload when integrated
+      (then invalidates the VM list query); mock mode relies on BFF finalize persistence alone.
     look: >-
       Title (h2) “Review and create” (nav label remains “Review”). Intro Content: “Confirm the choices below,
       then create the virtual machine.” Then Checkbox “Start this virtual machine after creation”
       (binds startAfterCreate), then flow-specific summary. New path keeps a compact DescriptionList
       (operating system, boot source, vCPU, memory, cloud-init user data). Template path renders expanded
-      sections that mirror customization tabs: Overview, Storage, Network, SSH, Scheduling, Initial run,
-      Metadata. Clone path also uses the same section set, populated from the selected source VM;
+      sections aligned with customization: Overview (name, vCPU, memory, run strategy), Storage (boot + additional
+      disks), Network (subnet, security groups), SSH, Image & user data. Clone path also uses the same section set,
+      populated from the selected source VM;
       Overview includes Deployment=Clone, new virtual machine name, and source virtual machine.
       Footer primary “Create virtual machine”.
     validate_client: Always allowed to attempt finalize (BFF validates full prior steps).
@@ -448,7 +477,10 @@ steps:
 
     interactions:
       - Filter by OS and workload, optionally clear filters; search narrows list; select one template card.
-      - Click Next when selectedTemplateId set; BFF validates template id against catalog for session tenant context.
+      - >-
+        Template cards populate from **GET /api/fulfillment/v1/compute_instance_templates** (same source as vm-template-catalog),
+        not from bundled VM_TEMPLATES alone.
+      - Click Next when selectedTemplateId set; BFF validates template id against fulfillment-backed inventory for session tenant context.
 
   - id: cvm_wizard_source_clone
     title: Source VM for clone
@@ -491,9 +523,8 @@ steps:
   - id: cvm_wizard_customization
     title: Customization
     goal: >-
-      New path optional cloud-init user data only; template path VM name required plus Tabs (Overview
-      summary and three toggles; other tabs Storage, Network, SSH, Scheduling, Initial run, Metadata are
-      demo placeholders).
+      New path optional cloud-init user data only; template path VM name plus editable **ComputeInstance.spec**
+      fields across Overview / Storage / Network / SSH / Image & user data tabs (see step_worksheets.customization).
 
     ui:
       components:
@@ -507,8 +538,8 @@ steps:
         - Tabs
         - Tab
         - TabTitleText
-        - DescriptionList
-        - Switch
+        - FormSelect
+        - FormSelectOption
         - Stack
     ui_policy:
       prefer_patternfly_primitives: true
@@ -525,10 +556,12 @@ steps:
     interactions:
       - Read step heading and path-specific intro; for template enter virtual machine name (required for Next).
       - For new path set optional cloud-init user data in TextArea.
-      - Template path: Tabs include Overview (read-only resource summary and Switches for headless, guest
-        system log access, deletion protection; defaults on for the latter two) plus placeholder tabs
-        Storage, Network, SSH, Scheduling, Initial run, Metadata.
-      - Next sends customization payload to BFF; BFF merges into draft and validates templateVmName when mode is template.
+      - >-
+        Template path: Overview tab edits vCPU, memory GiB, and run strategy (**Always** / **Halted** wire values).
+        Storage tab edits boot disk GiB and optional additional data disks. Network, SSH, and Image & user data tabs
+        capture optional placement and access fields per fulfillment spec.
+      - Next sends customization payload to BFF; BFF merges into draft and validates required template fields
+        (name, boot disk, cores, memory, additional disk list format) when mode is template.
 
   - id: cvm_wizard_review_create
     title: Review and create
@@ -557,7 +590,8 @@ steps:
     interactions:
       - Read heading and intro, then toggle “Start this virtual machine after creation” (included in finalize payload).
       - Inspect expanded sections rendered for current flow.
-      - Click Create virtual machine to call BFF finalize; on success close modal, invalidate VM queries / append per app patterns, navigate My VMs where applicable; on error show Alert and remain on review.
+      - Click Create virtual machine to call BFF finalize; on success close modal, then SPA POST
+        **POST /api/fulfillment/v1/compute_instances** when integrated (and invalidate VM queries); on error show Alert and remain on review.
 
 transitions:
   - from: cvm_modal_closed
@@ -654,6 +688,13 @@ validation_rules:
     when: deployment equals template
     rules:
       - rule: selected_template_id_required
+  - field: template_boot_disk_size_gib
+    when: deployment equals template on customization step
+    rules:
+      - rule: integer_gib_within_bounds
+        note: >-
+          Required positive integer GiB; seeded from selected template **defaults.boot_disk.size_gib**; min/max
+          documented with product (demo may use e.g. 1–512 GiB until policy API exists).
   - field: clone_source_and_name
     when: deployment equals clone
     rules:

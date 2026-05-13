@@ -1,11 +1,7 @@
 /** Mock event feed — GET /api/events/v1/events */
 import type { FastifyInstance } from 'fastify'
+import type { FulfillmentProxyRouteConfig } from './fulfillmentProxyConfig.js'
 import { proxyToUpstream } from './upstreamProxy.js'
-
-interface RouteConfig {
-  apiMode: string
-  fulfillmentApiUrl?: string
-}
 
 const MOCK_EVENTS = Array.from({ length: 50 }, (_, i) => ({
   id: `event-${i}`,
@@ -15,12 +11,19 @@ const MOCK_EVENTS = Array.from({ length: 50 }, (_, i) => ({
   severity: ['info', 'success', 'warning', 'info'][i % 4],
 }))
 
-export async function registerEventsRoutes(app: FastifyInstance, config: RouteConfig) {
-  const { apiMode, fulfillmentApiUrl } = config
+export async function registerEventsRoutes(
+  app: FastifyInstance,
+  config: FulfillmentProxyRouteConfig,
+) {
+  const { apiMode, fulfillmentApiUrl, fulfillmentFetch, tempFulfillmentStaticBearer } = config
 
   if (apiMode === 'dev' && fulfillmentApiUrl) {
+    // Same proxy workarounds as fulfillment (see upstreamProxy.ts — OSAC_WORKAROUND_REMOVE).
     app.all('/api/events/v1/*', async (req, reply) => {
-      await proxyToUpstream(req, reply, fulfillmentApiUrl)
+      await proxyToUpstream(req, reply, fulfillmentApiUrl, {
+        fetchImpl: fulfillmentFetch,
+        staticBearer: tempFulfillmentStaticBearer,
+      })
     })
     return
   }

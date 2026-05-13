@@ -4,6 +4,7 @@
  */
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table'
 import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
+import { resolveVmOsForUi } from '@osac/api-contracts'
 import { VmStatusLabel } from '@osac/ui-components'
 import { VmActionsMenu } from './VmActionsMenu'
 
@@ -12,7 +13,8 @@ interface VmTableProps {
   getState: (vm: ComputeInstance) => VmPowerState
   onSelect: (vm: ComputeInstance) => void
   onPower: (vm: ComputeInstance, action: 'start' | 'stop' | 'restart') => void
-  onClone: (vm: ComputeInstance) => void
+  /** WIZARD_TEMPLATE_ONLY: omit to hide clone until fulfillment supports it. */
+  onClone?: (vm: ComputeInstance) => void
 }
 
 export function VmTable({ vms, getState, onSelect, onPower, onClone }: VmTableProps) {
@@ -39,10 +41,12 @@ export function VmTable({ vms, getState, onSelect, onPower, onClone }: VmTablePr
                 <VmStatusLabel state={state} />
               </Td>
               <Td dataLabel="OS" style={{ textTransform: 'capitalize' }}>
-                {vm.os ?? '—'}
+                {resolveVmOsForUi(vm)}
               </Td>
               <Td dataLabel="vCPU">{vm.spec.cores ?? '—'}</Td>
-              <Td dataLabel="Memory">{vm.spec.memoryGib ? `${vm.spec.memoryGib} GiB` : '—'}</Td>
+              <Td dataLabel="Memory">
+                {vm.spec.memoryGib != null ? `${vm.spec.memoryGib} GiB` : '—'}
+              </Td>
               <Td dataLabel="IP">{vm.status.ipAddress ?? '—'}</Td>
               <Td dataLabel="Actions" isActionCell>
                 <div onClick={(e) => e.stopPropagation()}>
@@ -50,7 +54,7 @@ export function VmTable({ vms, getState, onSelect, onPower, onClone }: VmTablePr
                     vm={vm}
                     effectiveState={state}
                     onPower={(a) => onPower(vm, a)}
-                    onClone={() => onClone(vm)}
+                    {...(onClone ? { onClone: () => onClone(vm) } : {})}
                   />
                 </div>
               </Td>

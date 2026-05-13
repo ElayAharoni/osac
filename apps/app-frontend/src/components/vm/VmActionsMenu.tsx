@@ -7,7 +7,8 @@ interface VmActionsMenuProps {
   vm: ComputeInstance
   effectiveState?: VmPowerState
   onPower: (action: 'start' | 'stop' | 'restart') => void
-  onClone: () => void
+  /** WIZARD_TEMPLATE_ONLY: omit to hide Clone until fulfillment supports it. */
+  onClone?: () => void
   onMigrate?: () => void
   onDelete?: () => void
 }
@@ -26,7 +27,7 @@ export function VmActionsMenu({
   const canStart = state === 'stopped'
   const canStop = state === 'running' || state === 'paused'
   const canRestart = state === 'running' || state === 'paused'
-  const canClone = true
+  const canClone = typeof onClone === 'function'
   const canMigrate = state === 'running' && typeof onMigrate === 'function'
   const canDelete = state === 'stopped' && typeof onDelete === 'function'
 
@@ -80,17 +81,19 @@ export function VmActionsMenu({
         >
           Restart
         </DropdownItem>
-        <DropdownItem
-          value="clone"
-          isDisabled={!canClone}
-          onClick={() => {
-            if (!canClone) return
-            onClone()
-            setOpen(false)
-          }}
-        >
-          Clone
-        </DropdownItem>
+        {onClone ? (
+          <DropdownItem
+            value="clone"
+            isDisabled={!canClone}
+            onClick={() => {
+              if (!canClone) return
+              onClone()
+              setOpen(false)
+            }}
+          >
+            Clone
+          </DropdownItem>
+        ) : null}
         <DropdownItem
           value="migrate"
           isDisabled={!canMigrate}

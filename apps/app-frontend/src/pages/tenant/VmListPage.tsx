@@ -2,7 +2,6 @@
  * flow: manage-virtual-machines
  * steps: mvm_list_view, mvm_detail_drawer
  */
-import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -33,13 +32,14 @@ import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
 import { ThLargeIcon } from '@patternfly/react-icons/dist/esm/icons/th-large-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
 import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
+import { formatVmStorageGiBLine, resolveVmOsForUi } from '@osac/api-contracts'
 import linuxMascotUrl from '../../assets/guest-os-tux-linux.png'
 import { VmStatusLabel } from '@osac/ui-components'
 import { useSession } from '../../contexts/SessionContext'
-import { useComputeInstances } from '../../api/hooks'
+import { useComputeInstances, useProvisionVm } from '../../api/hooks'
 import { PageHeader } from '../../components/layout'
 import { VmDetailDrawer } from '../../components/vm/VmDetailDrawer'
-import type { CreateVmWizardHandle } from '../../components/vm/CreateVmWizard'
+import type { CreateVmWizardHandle, DeploymentMode } from '../../components/vm/CreateVmWizard'
 import { CreateVmWizard } from '../../components/vm/CreateVmWizard'
 import { VmActionsMenu } from '../../components/vm/VmActionsMenu'
 import { VmTable } from '../../components/vm/VmTable'
@@ -125,26 +125,18 @@ function VmDetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function vmStorageSummary(vm: ComputeInstance): string {
-  if (vm.spec.bootDisk || vm.spec.additionalDisks?.length) {
-    return `Configured (${(vm.spec.additionalDisks?.length ?? 0) + (vm.spec.bootDisk ? 1 : 0)} disk(s))`
-  }
-  return 'Not specified'
-}
-
 function openVmConsole(vm: ComputeInstance) {
   const base = `${window.location.origin}${window.location.pathname}`
   const q = new URLSearchParams({
     demo: 'vm-console',
     vm: vm.id,
     name: vm.metadata.name,
-    os: vm.os ?? 'linux',
+    os: resolveVmOsForUi(vm),
   })
   window.open(`${base}?${q.toString()}`, '_blank', 'noopener,noreferrer')
 }
 
 export function VmListPage() {
-  const queryClient = useQueryClient()
   const { selectedTenant, role, topologyDetailRequest, clearTopologyDetailRequest } = useSession()
   const [searchParams] = useSearchParams()
   const wizardRef = useRef<CreateVmWizardHandle>(null)
@@ -159,6 +151,14 @@ export function VmListPage() {
   const [vmStates, setVmStates] = useState<Map<string, VmPowerState>>(new Map())
 
   const { data: vms = [], isLoading } = useComputeInstances()
+  const provisionVm = useProvisionVm()
+
+  const handleWizardProvision = useCallback(
+    (vm: ComputeInstance, meta: { mode: DeploymentMode }) => {
+      provisionVm.mutate({ vm, specTemplateOnly: meta.mode === 'template' })
+    },
+    [provisionVm],
+  )
 
   useEffect(() => {
     if (!topologyDetailRequest) return
@@ -185,7 +185,7 @@ export function VmListPage() {
     const state = getEffectiveState(vm)
     const matchesSearch = !search || vm.metadata.name.toLowerCase().includes(search.toLowerCase())
     const matchesPower = powerFilter === 'all' || state === powerFilter
-    const matchesOs = osFilter === 'all' || (vm.os ?? 'linux') === osFilter
+    const matchesOs = osFilter === 'all' || resolveVmOsForUi(vm) === osFilter
     return matchesSearch && matchesPower && matchesOs
   })
 
@@ -203,18 +203,18 @@ export function VmListPage() {
         ref={wizardRef}
         existingVms={vms}
         tenant={tenant}
-        onProvision={(_vm) => {
-          void queryClient.invalidateQueries({ queryKey: ['compute_instances'] })
-        }}
+        onProvision={handleWizardProvision}
       />
 
       {selectedVm ? (
+        /* WIZARD_TEMPLATE_ONLY — RESTORE onClone on VmDetailDrawer when clone returns:
+           onClone={() => wizardRef.current?.openFromClone(selectedVm.id)}
+        */
         <VmDetailDrawer
           vm={selectedVm}
           effectiveState={detailState}
           onClose={() => setSelectedVm(null)}
           onPower={(action) => handlePowerAction(selectedVm, action)}
-          onClone={() => wizardRef.current?.openFromClone(selectedVm.id)}
           onOpenConsole={() => openVmConsole(selectedVm)}
         />
       ) : (
@@ -341,7 +341,7 @@ export function VmListPage() {
                               justifyContent={{ default: 'justifyContentSpaceBetween' }}
                             >
                               <FlexItem>
-                                <VmOsIcon os={vm.os} size={24} />
+                                <VmOsIcon os={resolveVmOsForUi(vm)} size={24} />
                               </FlexItem>
                               <FlexItem>
                                 <Flex
@@ -372,6 +372,10 @@ export function VmListPage() {
                                     <VmStatusLabel state={state} />
                                   </FlexItem>
                                   <FlexItem>
+                                    {/*
+                                    WIZARD_TEMPLATE_ONLY — RESTORE VmActionsMenu onClone when clone returns:
+                                    onClone={() => wizardRef.current?.openFromClone(vm.id)}
+                                    */}
                                     <span
                                       onClick={(event) => event.stopPropagation()}
                                       onMouseDown={(event) => event.stopPropagation()}
@@ -381,7 +385,6 @@ export function VmListPage() {
                                         vm={vm}
                                         effectiveState={state}
                                         onPower={(a) => handlePowerAction(vm, a)}
-                                        onClone={() => wizardRef.current?.openFromClone(vm.id)}
                                       />
                                     </span>
                                   </FlexItem>
@@ -415,17 +418,19 @@ export function VmListPage() {
                           <FlexItem>
                             <VmDetailField
                               label="CPU"
-                              value={`${(vm.spec.cores ?? 0).toString()} vCPU`}
+                              value={vm.spec.cores != null ? `${vm.spec.cores} vCPU` : '—'}
                             />
                           </FlexItem>
                           <FlexItem>
                             <VmDetailField
                               label="Memory"
-                              value={`${(vm.spec.memoryGib ?? 0).toString()} GiB`}
+                              value={
+                                vm.spec.memoryGib != null ? `${vm.spec.memoryGib} GiB` : '—'
+                              }
                             />
                           </FlexItem>
                           <FlexItem>
-                            <VmDetailField label="Storage" value={vmStorageSummary(vm)} />
+                            <VmDetailField label="Storage" value={formatVmStorageGiBLine(vm.spec)} />
                           </FlexItem>
                         </Flex>
                         <Divider style={{ marginTop: 'var(--pf-t--global--spacer--sm)' }} />
@@ -447,12 +452,12 @@ export function VmListPage() {
               })}
             </Gallery>
           ) : (
+            /* WIZARD_TEMPLATE_ONLY — RESTORE when clone returns: onClone={(vm) => wizardRef.current?.openFromClone(vm.id)} */
             <VmTable
               vms={filteredVms}
               getState={getEffectiveState}
               onSelect={setSelectedVm}
               onPower={handlePowerAction}
-              onClone={(vm) => wizardRef.current?.openFromClone(vm.id)}
             />
           )}
         </>

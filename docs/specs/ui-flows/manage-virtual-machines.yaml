@@ -60,8 +60,16 @@ steps:
       - Click Create virtual machine in the header-right area to open the create VM wizard (tenant user only).
       - Use the separator-bounded filter row to search by VM name, filter by status (all/running/stopped/paused), and filter by OS.
       - Toggle card versus table layout from the right side of the filter row with compact icon-only controls.
+      - >-
+        Table columns (Name, Status, OS, vCPU, Memory, IP) use the same normalized fields as cards; OS column uses
+        derived os label/heuristic when `vm.os` demo field missing.
       - Review card layout with fixed minimum width and visible border; header places larger OS icon top-left and Console outline label + VmStatusLabel + actions menu top-right.
-      - Review card body order: VM name below icon row, description, CPU/Memory/Storage key-above-value row, divider, then inline keyed rows for IP address and created date.
+      - >-
+        Card body order: VM **name** (`metadata.name`), optional description when present, CPU/Memory/Storage row using
+        **spec.cores**, **spec.memory_gib** (GiB), **boot_disk.size_gib** (+ additional disks when present) after wire
+        normalization — see backend-fulfillment.yaml `compute_instances_wire_format_and_ui.my_vms_surfaces`.
+      - Divider, then inline keyed rows for **IP** (`status.ip_address`) and **created** (`metadata.creation_timestamp` normalized).
+      - OS icon uses heuristic from **spec.image** / template when demo-only `os` field absent (same heuristic as detail Overview).
       - Open row or card actions menu with start stop restart clone migrate delete; enablement is state-aware (for example start only when stopped, stop/restart when running or paused).
       - Select VM row or card to replace the list with full-detail layout.
       - Re-select My VMs nav to return from detail to list.
@@ -107,7 +115,13 @@ steps:
       - Review two-card detail layout: large primary card for tabbed VM properties and smaller right-side console card.
       - Navigate tabs within detail.
       - Use the console card to view status and launch console; use top-right actions menu (start stop restart clone migrate delete) with state-aware disabled items.
-      - Read VM properties in Overview and Networking tabs and condition diagnostics in Conditions tab.
+      - >-
+        Overview tab: vCPU/Memory/Storage/Created align with wire-normalized spec + metadata (camelCase in TS after normalize).
+      - >-
+        Networking: IP from `status.ip_address`; subnet UUID may display short form or resolved name via networks/subnets APIs when available.
+      - >-
+        Conditions tab: render **type**, **status**, **reason**, **message**, **last_transition_time** from fulfillment
+        condition objects (humanize proto enum suffixes optional); empty array shows existing empty-state copy.
 
   - id: mvm_topology_handoff
     title: Open VM detail from network topology

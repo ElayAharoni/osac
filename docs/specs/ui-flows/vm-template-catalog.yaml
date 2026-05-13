@@ -6,6 +6,17 @@ applies_when: >-
   tenant user Templates nav, tenant admin VM templates nav, or provider admin Global templates nav.
   Tenant user is the primary implementation baseline for this flow.
 
+backend:
+  normative_spec: ../template-catalog-wizard-api-alignment.yaml
+  primary_api:
+    list: GET /api/fulfillment/v1/compute_instance_templates
+    detail: GET /api/fulfillment/v1/compute_instance_templates/{id}
+  rules:
+    - >-
+      Catalog grid, search, filters, and drawer detail MUST use the primary_api paths via BFF (not cluster_templates for VM rows).
+    - >-
+      Create VM wizard template step MUST reuse the **same** client/hook/query as this flow — single template inventory (see create-virtual-machine-wizard.yaml cross-reference).
+
 rbac:
   required_permissions_by_step:
     vmc_catalog_grid:
@@ -80,7 +91,9 @@ steps:
       - Use sidebar Categories checkboxes (Operating system and Workload); each group uses OR semantics within the group.
       - Apply cross-group filtering with AND semantics (OS match and workload match, when groups are active).
       - Click All items to clear both checkbox groups (search text remains unchanged).
-      - Type in keyword search to filter by title, subtitle, boot source pvc, workload labels, network/access labels, CPU, and memory.
+      - >-
+        Type in keyword search to filter by title, subtitle, workload labels, network/access labels, CPU, memory,
+        and boot disk size (GiB) derived from template **defaults.boot_disk.size_gib** (wire) / normalized field — not boot-volume PVC strings.
       - Re-select Templates while already on the templates nav to close the detail drawer via navReselectSeq.
       - Drawer shows only one detail surface (no Parameters tab).
       - Opening drawer must not require any card-level checkbox, radio, or explicit selected control on the card face.
@@ -136,7 +149,10 @@ steps:
         - Card header contains icon tile, template title, and subtitle (no badge-style workload labels in header).
         - Template title typography is smaller and more refined than current default catalog heading style (use a compact heading/body-large token style).
         - OS icon set in catalog cards must be identical to wizard template cards (RHEL Redhat icon, Windows icon, Linux Tux icon) with same visual sizing rules.
-        - Card body contains resource row with CPU, Memory, and Storage as text values.
+        - >-
+          Card body contains resource row with CPU, Memory, and **Storage** as text values. **Storage** MUST show the numeric
+          boot disk size in GiB from the template resource **`defaults.boot_disk.size_gib`** (fulfillment wire snake_case; normalize in UI model).
+          Do **not** show a generic “boot volume” label or boot PVC name in place of this GiB value on the card.
         - Remove boot source pvc string from card body (for example rhel-9-general-boot-pvc must not appear between resources and divider).
         - Do not render additional descriptive/spec rows under the resources row except workload.
         - After the divider, render only a compact workload line and omit Network and Access rows.
@@ -144,7 +160,9 @@ steps:
         - Prefer text row treatment over Label chips/badges for workload.
         - Description text and resource text use the same color treatment as workload line for visual consistency.
       drawer_details_content:
-        - Details area must present exactly these fields in order as key-value rows: Guest operating system, CPU, Memory, Storage, Workload.
+        - >-
+          Details area must present exactly these fields in order as key-value rows: Guest operating system, CPU, Memory, Storage, Workload.
+          **Storage** is **`defaults.boot_disk.size_gib` GiB** (formatted, e.g. “64 GiB”), not boot-volume PVC id text unless product explicitly adds a separate row later.
         - Do not show Network or Access fields in drawer details.
         - Include three status switches below the details rows: Headless mode, Guest system log access, Deletion protection.
         - These switches are informational only and must be disabled (non-interactive).
@@ -236,8 +254,9 @@ validation_rules:
     rules:
       - rule: optional_substring_match_case_insensitive
         note: >-
-          Search checks title, subtitle, boot source pvc, workload labels (card and canonical),
-          network/access display labels, CPU, and memory. No minimum length.
+          >-
+            Search checks title, subtitle, workload labels (card and canonical), network/access display labels,
+            CPU, memory, and boot disk GiB string derived from **defaults.boot_disk.size_gib**. No minimum length.
   - field: create_from_template_entry
     rules:
       - rule: selected_template_required

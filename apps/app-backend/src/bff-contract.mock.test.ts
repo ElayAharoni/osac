@@ -25,14 +25,68 @@ describe('BFF mock mode (integration contract)', () => {
     await app.close()
   })
 
-  it('GET /api/fulfillment/v1/cluster_templates returns page envelope', async () => {
+  it('GET /api/fulfillment/v1/compute_instance_templates returns page envelope', async () => {
     const app = await buildApp({ apiMode: 'mock', logger: false })
-    const res = await app.inject({ method: 'GET', url: '/api/fulfillment/v1/cluster_templates' })
+    const res = await app.inject({ method: 'GET', url: '/api/fulfillment/v1/compute_instance_templates' })
     expect(res.statusCode).toBe(200)
     const body = res.json() as { size: number; total: number; items: unknown[] }
     expect(typeof body.size).toBe('number')
     expect(typeof body.total).toBe('number')
     expect(Array.isArray(body.items)).toBe(true)
+    expect(body.items.length).toBeGreaterThan(0)
+    await app.close()
+  })
+
+  it('GET /api/fulfillment/v1/compute_instance_templates supports filter and paging', async () => {
+    const app = await buildApp({ apiMode: 'mock', logger: false })
+    const all = await app.inject({
+      method: 'GET',
+      url: '/api/fulfillment/v1/compute_instance_templates',
+    })
+    const total = (all.json() as { total: number }).total
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/api/fulfillment/v1/compute_instance_templates?filter=rhel',
+    })
+    expect(filtered.statusCode).toBe(200)
+    const fb = filtered.json() as { total: number; items: Array<{ title?: string }> }
+    expect(fb.total).toBeLessThanOrEqual(total)
+    expect(
+      fb.items.every((it) => {
+        const row = it as { title?: string; description?: string }
+        const hay = `${row.title ?? ''} ${row.description ?? ''}`.toLowerCase()
+        return hay.includes('rhel')
+      }),
+    ).toBe(true)
+
+    const page = await app.inject({
+      method: 'GET',
+      url: '/api/fulfillment/v1/compute_instance_templates?limit=1&offset=0',
+    })
+    expect(page.statusCode).toBe(200)
+    const pb = page.json() as { size: number; total: number; items: unknown[] }
+    expect(pb.size).toBe(1)
+    expect(pb.total).toBe(total)
+    await app.close()
+  })
+
+  it('GET /api/fulfillment/v1/compute_instance_templates/:id returns template or 404', async () => {
+    const app = await buildApp({ apiMode: 'mock', logger: false })
+    const list = await app.inject({ method: 'GET', url: '/api/fulfillment/v1/compute_instance_templates?limit=1' })
+    const id = (list.json() as { items: Array<{ id: string }> }).items[0]?.id
+    expect(id).toBeTruthy()
+    const ok = await app.inject({
+      method: 'GET',
+      url: `/api/fulfillment/v1/compute_instance_templates/${encodeURIComponent(id)}`,
+    })
+    expect(ok.statusCode).toBe(200)
+    expect((ok.json() as { id: string }).id).toBe(id)
+
+    const missing = await app.inject({
+      method: 'GET',
+      url: '/api/fulfillment/v1/compute_instance_templates/__no_such_template__',
+    })
+    expect(missing.statusCode).toBe(404)
     await app.close()
   })
 

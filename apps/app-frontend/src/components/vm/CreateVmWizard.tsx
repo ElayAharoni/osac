@@ -1,6 +1,9 @@
 /**
  * flow: create-virtual-machine-wizard
- * steps: cvm_modal_open, cvm_wizard_*, cvm_wizard_review_create
+ * steps: cvm_modal_open, cvm_wizard_template, cvm_wizard_customization, cvm_wizard_review_create
+ *
+ * WIZARD_TEMPLATE_ONLY (2026): only **create from template** is active; new + clone paths are commented
+ * in this file and in stepIds / BFF createVmWizard. RESTORE when fulfillment implements those flows.
  *
  * PatternFly Wizard (WizardNav) inside Modal; step transitions via BFF session API.
  * Per-step operate / validate contract: docs/specs/ui-flows/create-virtual-machine-wizard.yaml (step_worksheets).
@@ -28,28 +31,32 @@ import {
   type WizardSessionResponse,
 } from '../../api/createVmWizardClient'
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react'
-import { draftFromSession, INITIAL_STATE } from './createVmWizard/constants'
+import {
+  draftFromSession,
+  INITIAL_STATE,
+  parseTemplateAdditionalDisksGibInput,
+  parseTemplateBootDiskGibInput,
+  parseTemplateCoresInput,
+  parseTemplateMemoryGibInput,
+} from './createVmWizard/constants'
 import { getWizardOrderedSteps } from './createVmWizard/stepIds'
 import {
-  BootSourceStep,
-  CloneSourceStep,
-  ComputeStep,
+  // WIZARD_TEMPLATE_ONLY — RESTORE when new/clone flows return:
+  // BootSourceStep,
+  // CloneSourceStep,
+  // ComputeStep,
   CustomizationStep,
-  DeploymentStep,
-  GuestOsStep,
+  // DeploymentStep,
+  // GuestOsStep,
   ReviewStep,
   TemplateStep,
 } from './createVmWizard/steps/WizardSteps'
 import type { CreateVmWizardHandle, DeploymentMode, WizardState } from './createVmWizard/types'
-export type { CreateVmWizardHandle } from './createVmWizard/types'
+export type { CreateVmWizardHandle, DeploymentMode } from './createVmWizard/types'
 
 const STEP_LABELS: Record<string, string> = {
-  deployment: 'Select a creation method',
-  'guest-os': 'Guest operating system',
-  'boot-source': 'Boot source',
-  compute: 'Compute resources',
+  // RESTORE deployment / guest-os / boot-source / compute / clone-source labels when those steps return.
   template: 'Templates',
-  'clone-source': 'Source VM',
   customization: 'Customization',
   review: 'Review',
 }
@@ -57,32 +64,41 @@ const STEP_LABELS: Record<string, string> = {
 interface Props {
   existingVms: ComputeInstance[]
   tenant: DemoTenantId
-  onProvision: (vm: ComputeInstance) => void
+  onProvision: (vm: ComputeInstance, meta: { mode: DeploymentMode }) => void
   defaultMode?: DeploymentMode
 }
 
 function canProceedLocal(stepId: string, state: WizardState): boolean {
   switch (stepId) {
+    /*
+    RESTORE when new + clone steps return:
     case 'guest-os':
       return !!state.osFamilyNew && !!state.osTypeNew
     case 'boot-source':
       return !!state.bootSource
     case 'compute':
       return !!state.cpuNew.trim() && !!state.memoryNew.trim()
-    case 'template':
-      return !!state.selectedTemplateId
     case 'clone-source':
       return !!state.cloneSourceVmId && !!state.cloneNewName.trim()
+    */
+    case 'template':
+      return !!state.selectedTemplateId
     case 'customization':
-      if (state.mode === 'template') return !!state.templateVmName.trim()
-      return true
+      return (
+        !!state.templateVmName.trim() &&
+        parseTemplateBootDiskGibInput(state.templateBootDiskSizeGib) !== null &&
+        parseTemplateCoresInput(state.templateCores) !== null &&
+        parseTemplateMemoryGibInput(state.templateMemoryGib) !== null &&
+        parseTemplateAdditionalDisksGibInput(state.templateAdditionalDisksGibRaw) !== null
+      )
     default:
       return true
   }
 }
 
 export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function CreateVmWizard(
-  { existingVms, tenant: _tenant, onProvision, defaultMode = 'new' },
+  /** WIZARD_TEMPLATE_ONLY: default was `'new'` — RESTORE when deployment picker returns. */
+  { existingVms, tenant: _tenant, onProvision, defaultMode = 'template' },
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(false)
@@ -93,7 +109,8 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
   )
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pending, setPending] = useState(false)
-  const [cloneSearch, setCloneSearch] = useState('')
+  /** RESTORE: second tuple element was `cloneSearch` for CloneSourceStep. */
+  const [, setCloneSearch] = useState('')
 
   const resetLocal = useCallback(() => {
     setSession(null)
@@ -133,10 +150,10 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
       setIsOpen(true)
       void runStart({ entry: 'catalog', presetTemplateId: templateId })
     },
-    openFromClone(sourceVmId) {
-      resetLocal()
-      setIsOpen(true)
-      void runStart({ entry: 'clone_drawer', presetCloneSourceVmId: sourceVmId })
+    openFromClone(_sourceVmId) {
+      // WIZARD_TEMPLATE_ONLY — RESTORE when fulfillment supports clone:
+      // resetLocal(); setIsOpen(true); void runStart({ entry: 'clone_drawer', presetCloneSourceVmId: sourceVmId })
+      void _sourceVmId
     },
   }))
 
@@ -193,7 +210,7 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
     try {
       if (isReview) {
         const { object } = await finalizeWizardSession(session.sessionId, draft)
-        onProvision(object)
+        onProvision(object, { mode: draft.mode })
         setIsOpen(false)
         resetLocal()
         return
@@ -220,6 +237,8 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
 
   const renderStepBody = (stepId: string) => {
     switch (stepId) {
+      /*
+      RESTORE when new + clone flows return:
       case 'deployment':
         return <DeploymentStep state={draft} update={update} />
       case 'guest-os':
@@ -228,8 +247,6 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
         return <BootSourceStep state={draft} update={update} />
       case 'compute':
         return <ComputeStep state={draft} update={update} />
-      case 'template':
-        return <TemplateStep state={draft} update={update} />
       case 'clone-source':
         return (
           <CloneSourceStep
@@ -240,6 +257,9 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
             vms={existingVms}
           />
         )
+      */
+      case 'template':
+        return <TemplateStep state={draft} update={update} />
       case 'customization':
         return <CustomizationStep state={draft} update={update} />
       case 'review':
@@ -272,7 +292,8 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
 
   /** WizardHeader already renders a close control; Modal `onClose` would add a second box close button. */
   const hideModalBoxClose = Boolean(session && !loading)
-  const isDeploymentStep = session?.activeStepId === 'deployment'
+  /** RESTORE: `session?.activeStepId === 'deployment'` when deployment step returns. */
+  const isDeploymentStep = false
 
   return (
     <Modal
@@ -325,8 +346,8 @@ export const CreateVmWizard = forwardRef<CreateVmWizardHandle, Props>(function C
           height="min(680px, calc(100vh - 120px))"
           header={
             <WizardHeader
-              title="Create virtual machine"
-              description="Complete the steps to provision a virtual machine."
+              title="Create virtual machine from template"
+              description="Select a template, customize, and provision. Other creation methods will return when the platform supports them."
               onClose={close}
               closeButtonAriaLabel="Close wizard"
             />

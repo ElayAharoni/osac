@@ -5,6 +5,10 @@ backend:
   description: Full-page activity feed; align with backend-fulfillment.yaml flows.recent-activities and context.osac_bff_runtime_modes.
   dev:
     primary: GET /api/events/v1/events (fulfillment Events.Watch; BFF must proxy in OSAC_API_MODE=dev)
+    implementation_note: >-
+      The BFF currently buffers the upstream response before returning it (backend-fulfillment.yaml
+      bff_proxy_matrix_dev.implementation_notes). Client streaming/SSE consumption may still work for many gateways;
+      treat low-latency chunk delivery as a future improvement when true streaming passthrough lands.
   mock:
     note: May use BFF mock JSON or client-derived activities until stream integration ships.
 

@@ -1,4 +1,6 @@
 import {
+  Alert,
+  Bullseye,
   Button,
   Card,
   CardBody,
@@ -11,6 +13,7 @@ import {
   Label,
   Radio,
   SearchInput,
+  Spinner,
   Stack,
   StackItem,
   Title,
@@ -19,9 +22,15 @@ import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
 import { useMemo, useState } from 'react'
 import type { ClusterTemplate, TemplateWorkloadProfile } from '@osac/api-contracts'
-import { VM_TEMPLATES } from '@osac/api-contracts'
 import linuxMascotUrl from '../../../../assets/guest-os-tux-linux.png'
+import { useComputeInstanceTemplates } from '../../../../api/hooks'
+import { defaultTemplateBootDiskGib } from '../constants'
 import type { UpdateFn, WizardState } from '../types'
+
+function applySelectedTemplate(tpl: ClusterTemplate, update: UpdateFn) {
+  update('selectedTemplateId', tpl.id)
+  update('templateBootDiskSizeGib', String(defaultTemplateBootDiskGib(tpl)))
+}
 
 const OS_FILTER_OPTIONS = [
   { value: 'all', label: 'All operating systems' },
@@ -62,8 +71,16 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
   const [workloadFilter, setWorkloadFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
 
+  const {
+    data: templates = [],
+    isPending: templatesLoading,
+    isError: templatesError,
+    error: templatesErrorDetail,
+    refetch: refetchTemplates,
+  } = useComputeInstanceTemplates()
+
   const filtered = useMemo(() => {
-    let list: ClusterTemplate[] = [...VM_TEMPLATES]
+    let list: ClusterTemplate[] = [...templates]
     if (osFilter !== 'all') {
       list = list.filter((t) => (t.icon ?? 'linux') === osFilter)
     }
@@ -80,7 +97,7 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
       )
     }
     return list
-  }, [osFilter, workloadFilter, search])
+  }, [templates, osFilter, workloadFilter, search])
 
   const clearFilters = () => {
     setOsFilter('all')
@@ -156,24 +173,48 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
       <StackItem>
         <Flex gap={{ default: 'gapSm' }} flexWrap={{ default: 'wrap' }} alignItems={{ default: 'alignItemsBaseline' }}>
           <Content component="p" style={{ margin: 0, fontWeight: 600 }}>
-            {countPhrase}
+            {templatesLoading ? 'Loading templates…' : countPhrase}
           </Content>
           <Content component="p" className="pf-v6-u-color-text-subtle" style={{ margin: 0 }}>
             Select one to continue.
           </Content>
         </Flex>
       </StackItem>
+      {templatesError ? (
+        <StackItem>
+          <Stack hasGutter>
+            <StackItem>
+              <Alert variant="danger" title="Could not load templates">
+                {templatesErrorDetail instanceof Error ? templatesErrorDetail.message : 'Request failed'}
+              </Alert>
+            </StackItem>
+            <StackItem>
+              <Button variant="primary" onClick={() => void refetchTemplates()}>
+                Retry
+              </Button>
+            </StackItem>
+          </Stack>
+        </StackItem>
+      ) : null}
       <StackItem>
         <div className="osac-template-cards" role="radiogroup" aria-labelledby="template-step-heading">
-          {count === 0 ? (
+          {templatesLoading ? (
+            <Bullseye style={{ padding: 'var(--pf-t--global--spacer--xl)', gridColumn: '1 / -1' }}>
+              <Spinner aria-label="Loading templates" />
+            </Bullseye>
+          ) : null}
+          {!templatesLoading && !templatesError && count === 0 ? (
             <Content component="p" className="pf-v6-u-color-text-subtle" style={{ gridColumn: '1 / -1', margin: 0 }}>
               No templates match your filters or search. Try clearing filters or changing keywords.
             </Content>
           ) : null}
-          {filtered.map((tpl) => {
+          {!templatesLoading &&
+            !templatesError &&
+            filtered.map((tpl) => {
             const selected = state.selectedTemplateId === tpl.id
             const cores = tpl.defaultCores ?? 2
             const mem = tpl.defaultMemoryGib ?? 8
+            const diskGib = defaultTemplateBootDiskGib(tpl)
             const profile = tpl.workloadProfile
             return (
               <div key={tpl.id}>
@@ -183,7 +224,7 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
                   isCompact
                   isClickable
                   isSelected={selected}
-                  onClick={() => update('selectedTemplateId', tpl.id)}
+                  onClick={() => applySelectedTemplate(tpl, update)}
                   ouiaId={`template-option-${tpl.id}`}
                   style={{
                     cursor: 'pointer',
@@ -211,7 +252,7 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
                           name="selectedCatalogTemplate"
                           aria-label={tpl.title}
                           isChecked={selected}
-                          onChange={() => update('selectedTemplateId', tpl.id)}
+                          onChange={() => applySelectedTemplate(tpl, update)}
                         />
                       </FlexItem>
                     </Flex>
@@ -239,7 +280,7 @@ export function TemplateStep({ state, update }: { state: WizardState; update: Up
                           component="p"
                           style={{ margin: 0, fontSize: 'var(--pf-t--global--font--size--body--sm)' }}
                         >
-                          {cores} vCPU · {mem} GiB memory
+                          {cores} vCPU · {mem} GiB memory · {diskGib} GiB disk
                         </Content>
                       </StackItem>
                       {profile ? (

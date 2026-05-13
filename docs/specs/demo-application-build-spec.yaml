@@ -13,6 +13,8 @@ agent:
   read_order:
     - file: FLOW-INDEX.yaml
       why: Canonical catalog of UI flows (flows[].id, flows[].file) and reusable UI components.
+    - file: template-catalog-wizard-api-alignment.yaml
+      why: Catalog + CreateVmWizard share GET compute_instance_templates; implementation prompt included.
     - file: design-system.yaml
       why: PatternFly 6 packages, layout shell, tokens, theming, a11y, and logical-to-PF component mapping.
     - file: demo-application-build-spec.yaml
@@ -124,7 +126,8 @@ spec_hierarchy:
       BFF and client use public REST shapes under /api/fulfillment/v1 (and documented
       capabilities/events/console). Cross-check UI data_requirements sections in that file.
       In OSAC_API_MODE=dev, proxy GET /api/events/v1/events to fulfillment for dashboard and
-      full-page activities per context.osac_bff_runtime_modes in backend-fulfillment.yaml.
+      full-page activities per context.osac_bff_runtime_modes in backend-fulfillment.yaml
+      (see bff_proxy_matrix_dev.implementation_notes for current buffered-proxy behavior vs streaming target).
       **Non-mock integration target** (OIDC + capabilities, full proxy matrix, JWT claims +
       Authorino alignment for x-subject, role-model alignment strategy, client/hooks for
       orgs/users/networks/events, replace VM_TEMPLATES/DEMO_* where APIs exist, TS alignment,
@@ -175,9 +178,13 @@ implementation_phases:
         mock mode holds sessions in process memory; document proxy behavior when fulfillment gains parity.
       - >-
         When OSAC_API_MODE=dev, implement **bff_proxy_matrix_dev** (context.osac_real_api_integration):
-        forward /api/fulfillment/v1, /api/events/v1, and /api/osac/public/v1 with Authorization
-        passthrough; stream /api/events/v1 without buffering entire body; avoid forcing JSON parse
-        on non-JSON upstream responses.
+        fail-fast startup (**bff_dev_startup**) when FULFILLMENT_API_URL is missing/invalid; forward
+        /api/fulfillment/v1, /api/events/v1, and /api/osac/public/v1 with Authorization passthrough;
+        use **fulfillment_upstream_tls** (FULFILLMENT_TLS_CA_FILE / TEMP_FULFILLMENT_TLS_INSECURE) for BFF→gateway TLS.
+        Proxy implementation today buffers upstream bodies before reply (see implementation_notes — revisit true streaming for events).
+      - >-
+        Document TEMP dev bearer workarounds (**bff_proxy_matrix_dev** implementation_notes): TEMP_FULFILLMENT_STATIC_BEARER,
+        capabilities GET exception, TEMP_FULFILLMENT_STATIC_BEARER_FORCE; SPA **VITE_DEV_BEARER_TOKEN** when sessionStorage empty.
       - Align security headers and auth bridging with osac-ui server patterns.
       - Serve production SPA from app-backend in prod mode; expose /health (and /ready if used).
       - Image build copies prebuilt assets from apps/app-frontend into the BFF app artifact so **one container** serves API + static UI.
@@ -219,6 +226,13 @@ implementation_phases:
         In OSAC_API_MODE=dev, implement jwt_claims_and_authorino_alignment and role_model_alignment
         from context.osac_real_api_integration. In OSAC_API_MODE=mock, keep session personas and
         fixture-backed behavior unchanged.
+      - >-
+        Normalize fulfillment compute_instances wire JSON (snake_case + COMPUTE_INSTANCE_STATE_* enums) per
+        backend-fulfillment.yaml **compute_instances_wire_format_and_ui** before rendering dashboard KPIs,
+        My VMs cards/table, and VM detail; align mocks/fixtures to the same normalized **ComputeInstance** shape.
+      - >-
+        Implement **template-catalog-wizard-api-alignment.yaml**: Templates catalog + wizard template step both call
+        **compute_instance_templates** with shared TanStack Query; remove VM_TEMPLATES-only picker in wizard TemplateStep.
       - Map routing and feature modules to FLOW-INDEX flows[].id (welcome, auth, shell, dashboards,
         catalog, wizard, VMs, activities, admin, console demo).
       - Respect cross_flow_entry_points and canonical_step_ids for navigation and deep links.
@@ -263,7 +277,8 @@ acceptance_checklist:
   - HTTP behavior matches backend-fulfillment.yaml for public operations the UI uses; mocks documented for gaps/private.
   - >-
     When OSAC_API_MODE=dev, integration matches **context.osac_real_api_integration** (proxy matrix,
-    OIDC/capabilities, hooks, POST `{ object }`, events stream, JWT claims + Authorino x-subject
+    startup/TLS upstream module, temp static-bearer dev aids, OIDC/capabilities, hooks, POST `{ object }`,
+    events API via BFF proxy per implementation_notes, JWT claims + Authorino x-subject
     alignment, role-model alignment strategy, DEMO_* / VM_TEMPLATES replacement, TS model alignment,
     utilization chart gap choice). When OSAC_API_MODE=mock, behavior stays on
     fixtures and existing demo types per mock_mode_invariant.

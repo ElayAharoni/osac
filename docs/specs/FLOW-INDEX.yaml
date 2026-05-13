@@ -21,6 +21,7 @@ ai-hints:
   readOrder:
     - FLOW-INDEX.yaml
     - rbac.yaml
+    - template-catalog-wizard-api-alignment.yaml
     - statecharts/<flow-id>.statechart.yaml
     - ui-flows/<flow-id>.yaml
     - design-system.yaml
@@ -69,6 +70,10 @@ implementation_specs:
     summary: >-
       Agent-executable monorepo build order for Projects/osac (BFF, UI, contracts, tests,
       deploy) tied to this FLOW-INDEX, ui-flows/, and backend-fulfillment.yaml.
+  - id: template-catalog-wizard-api-alignment
+    file: template-catalog-wizard-api-alignment.yaml
+    summary: >-
+      Catalog + CreateVmWizard template step share GET compute_instance_templates; copy-paste **implementer_agent.prompt_implementation**.
 
 backend_specs:
   - id: fulfillment-service-rest-grpc
@@ -100,19 +105,22 @@ flows:
   - id: tenant-user-dashboard
     file: ui-flows/tenant-user-dashboard.yaml
     summary: >-
-      VMaaS home — power-state stat cards; create VM; deep links into My VMs with filters.
-      In dev mode, dashboard "Recent activities" sidebar SHALL use GET /api/events/v1/events (see backend-fulfillment.yaml).
+      VMaaS home — power-state KPI cards derived from normalized compute_instances list (not static demo counts when API data exists);
+      create VM; deep links into My VMs with filters. Recent activities sidebar in dev per backend-fulfillment.yaml osac_bff_runtime_modes.
   - id: vm-template-catalog
     file: ui-flows/vm-template-catalog.yaml
-    summary: Template gallery for tenant user, tenant admin template catalog, provider global templates; opens create wizard from template.
+    summary: >-
+      Template gallery (tenant/admin/provider); data from GET **compute_instance_templates** per template-catalog-wizard-api-alignment.yaml;
+      opens create wizard from template.
   - id: create-virtual-machine-wizard
     file: ui-flows/create-virtual-machine-wizard.yaml
     summary: >-
-      Modal PatternFly Wizard (vertical WizardNav) — new / template / clone paths through review;
-      step transitions and finalize are BFF-driven (ephemeral session, no wizard URL routes).
+      Modal PatternFly Wizard — template path uses **same** compute_instance_templates inventory as catalog (shared query); BFF sessions for advance/finalize.
   - id: manage-virtual-machines
     file: ui-flows/manage-virtual-machines.yaml
-    summary: My VMs list, filters, detail drawer, power lifecycle, clone, console demo launch.
+    summary: >-
+      My VMs list/cards/table aligned with fulfillment compute_instances wire format after normalization (resources, IP, conditions);
+      filters, detail drawer, power lifecycle, clone, console demo launch.
   - id: recent-activities
     file: ui-flows/recent-activities.yaml
     summary: Full-page activity feed from masthead bell (breadcrumb return).
