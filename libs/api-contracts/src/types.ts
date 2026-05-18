@@ -31,7 +31,19 @@ export interface ListQuery {
 // Compute instances (VMs)
 // ---------------------------------------------------------------------------
 
-export type VmPowerState = 'running' | 'stopped' | 'paused' | 'starting' | 'deleting' | 'error'
+export type VmPowerState =
+  | 'running'
+  | 'stopped'
+  | 'paused'
+  | 'starting'
+  | 'stopping'
+  | 'restarting'
+  | 'deleting'
+  | 'error'
+  /** Client-only: wizard POST submitted, VM not yet in list (My VMs placeholder). */
+  | 'creating'
+  /** Client-only: list still missing VM after long wait (My VMs placeholder). */
+  | 'still_provisioning'
 
 export interface ComputeInstanceSpec {
   template?: string

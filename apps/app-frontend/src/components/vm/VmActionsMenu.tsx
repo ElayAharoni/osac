@@ -6,30 +6,33 @@ import type { ComputeInstance, VmPowerState } from '@osac/api-contracts'
 interface VmActionsMenuProps {
   vm: ComputeInstance
   effectiveState?: VmPowerState
+  /** True while stop→wait-for-stopped→start restart orchestration is in progress for this VM. */
+  isRestarting?: boolean
+  /** True while a pending Starting/Stopping/Restarting badge is active for this VM. */
+  isPowerActionPending?: boolean
   onPower: (action: 'start' | 'stop' | 'restart') => void
-  /** WIZARD_TEMPLATE_ONLY: omit to hide Clone until fulfillment supports it. */
-  onClone?: () => void
-  onMigrate?: () => void
   onDelete?: () => void
+  /* RESTORE when fulfillment supports clone — expose onClone?: () => void */
+  /* RESTORE when fulfillment supports migrate — expose onMigrate?: () => void */
 }
 
 export function VmActionsMenu({
   vm,
   effectiveState,
+  isRestarting = false,
+  isPowerActionPending = false,
   onPower,
-  onClone,
-  onMigrate,
   onDelete,
 }: VmActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const state = effectiveState ?? vm.status.state
 
-  const canStart = state === 'stopped'
-  const canStop = state === 'running' || state === 'paused'
-  const canRestart = state === 'running' || state === 'paused'
-  const canClone = typeof onClone === 'function'
-  const canMigrate = state === 'running' && typeof onMigrate === 'function'
-  const canDelete = state === 'stopped' && typeof onDelete === 'function'
+  const pending = isPowerActionPending || isRestarting
+  const canStart = state === 'stopped' && !pending
+  const canStop = (state === 'running' || state === 'paused') && !pending
+  const canRestart = (state === 'running' || state === 'paused') && !isRestarting && !pending
+  const canDelete =
+    typeof onDelete === 'function' && state !== 'deleting' && state !== 'starting'
 
   return (
     <Dropdown
@@ -81,30 +84,12 @@ export function VmActionsMenu({
         >
           Restart
         </DropdownItem>
-        {onClone ? (
-          <DropdownItem
-            value="clone"
-            isDisabled={!canClone}
-            onClick={() => {
-              if (!canClone) return
-              onClone()
-              setOpen(false)
-            }}
-          >
-            Clone
-          </DropdownItem>
-        ) : null}
-        <DropdownItem
-          value="migrate"
-          isDisabled={!canMigrate}
-          onClick={() => {
-            if (!canMigrate) return
-            onMigrate?.()
-            setOpen(false)
-          }}
-        >
-          Migrate
-        </DropdownItem>
+        {/* RESTORE Clone when fulfillment supports clone:
+        <DropdownItem value="clone" onClick={() => { onClone?.(); setOpen(false) }}>Clone</DropdownItem>
+        */}
+        {/* RESTORE Migrate when fulfillment supports migrate:
+        <DropdownItem value="migrate" onClick={() => { onMigrate?.(); setOpen(false) }}>Migrate</DropdownItem>
+        */}
         <DropdownItem
           value="delete"
           isDisabled={!canDelete}

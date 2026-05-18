@@ -392,13 +392,15 @@ Authoritative checklist for the **dev/real** integration target: `docs/specs/bac
 
 ### VM power actions (PATCH)
 
-- Start / Stop / Restart in the VM detail drawer update local UI state only (`vmStates` Map in `VmListPage`). The `PATCH /api/fulfillment/v1/compute_instances/:id` endpoint exists in the BFF but is not called for power actions.
-- **Integration needed:** Wire power action buttons to call `usePatchVm()` mutation with the new desired state, then poll or subscribe to status updates.
+- **My VMs:** Start / Stop / Restart call `PATCH` via `usePatchVm`. Pending badges via `useVmPowerActionDisplay` + `vmPowerPendingStore` (survives navigation). Power PATCH does not immediately refetch the list; pending actions poll every **10s**. Restart: **Restarting** → **Starting** → **running** per list GET (ignores stale terminal states).
+
+### VM actions not in menu (clone / migrate)
+
+- **Clone** and **Migrate** are not shown in `VmActionsMenu` until fulfillment supports them (UI commented with `RESTORE` markers). Create-from-template remains the supported wizard path.
 
 ### VM deletion
 
-- The delete endpoint exists in the BFF but there is no delete button in the UI.
-- **Integration needed:** Add a Delete action to `VmActionsMenu`, call `DELETE /api/fulfillment/v1/compute_instances/:id`, then invalidate the query.
+- **My VMs:** Delete in `VmActionsMenu` — confirm modal shows **Deleting** on confirm (`usePendingVmDeletes`). If not stopped, **PATCH stop** then `DELETE`. Card removed when list GET omits the VM (not on first server `deleting` state).
 
 ### VM creation — request body shape
 

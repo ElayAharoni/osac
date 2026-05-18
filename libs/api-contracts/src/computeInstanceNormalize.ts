@@ -89,7 +89,7 @@ export function mapFulfillmentComputeStateToVmPower(wire: string): VmPowerState 
       return 'starting'
     case 'COMPUTE_INSTANCE_STATE_STOPPING':
     case 'stopping':
-      return 'stopped'
+      return 'stopping'
     case 'COMPUTE_INSTANCE_STATE_DELETING':
     case 'deleting':
       return 'deleting'
@@ -335,16 +335,44 @@ export function normalizeComputeInstancePage(raw: unknown): PageOfT<ComputeInsta
 
 /** UI VmPowerState → fulfillment `status.state` enum string. */
 export function vmPowerStateToProtoEnum(state: VmPowerState | undefined): string | undefined {
-  if (!state) return undefined
-  const m: Record<VmPowerState, string> = {
+  if (!state || state === 'creating' || state === 'still_provisioning') return undefined
+  const m: Record<Exclude<VmPowerState, 'creating' | 'still_provisioning'>, string> = {
     running: 'COMPUTE_INSTANCE_STATE_RUNNING',
     stopped: 'COMPUTE_INSTANCE_STATE_STOPPED',
     paused: 'COMPUTE_INSTANCE_STATE_PAUSED',
     starting: 'COMPUTE_INSTANCE_STATE_STARTING',
+    stopping: 'COMPUTE_INSTANCE_STATE_STOPPING',
+    restarting: 'COMPUTE_INSTANCE_STATE_STARTING',
     deleting: 'COMPUTE_INSTANCE_STATE_DELETING',
     error: 'COMPUTE_INSTANCE_STATE_ERROR',
   }
   return m[state]
+}
+
+export type ComputeInstancePowerAction = 'start' | 'stop' | 'restart'
+
+/**
+ * PATCH body for Start / Stop / Restart on `PATCH …/compute_instances/{id}` (backend-fulfillment.yaml).
+ */
+export function serializeComputeInstancePowerPatch(
+  action: ComputeInstancePowerAction,
+): Record<string, unknown> {
+  switch (action) {
+    case 'stop':
+      return {
+        spec: { run_strategy: 'Halted' },
+        status: { state: 'COMPUTE_INSTANCE_STATE_STOPPED' },
+      }
+    case 'start':
+      return {
+        spec: { run_strategy: 'Always' },
+        status: { state: 'COMPUTE_INSTANCE_STATE_RUNNING' },
+      }
+    case 'restart':
+      return {
+        spec: { restart_requested_at: new Date().toISOString() },
+      }
+  }
 }
 
 function serializeMetadataForCreate(md: Metadata | undefined): Record<string, unknown> | undefined {

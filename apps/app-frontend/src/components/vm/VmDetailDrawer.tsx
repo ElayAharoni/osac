@@ -44,8 +44,10 @@ interface Props {
   effectiveState: VmPowerState
   onClose: () => void
   onPower: (action: 'start' | 'stop' | 'restart') => void
-  /** WIZARD_TEMPLATE_ONLY: omit to hide clone entry point until fulfillment supports clone. */
-  onClone?: () => void
+  onDelete?: () => void
+  /* RESTORE when fulfillment supports clone: onClone?: () => void */
+  isRestarting?: boolean
+  isPowerActionPending?: boolean
   onOpenConsole: () => void
 }
 
@@ -64,7 +66,9 @@ export function VmDetailDrawer({
   effectiveState,
   onClose,
   onPower,
-  onClone,
+  onDelete,
+  isRestarting = false,
+  isPowerActionPending = false,
   onOpenConsole,
 }: Props) {
   const [activeTab, setActiveTab] = useState(0)
@@ -298,8 +302,10 @@ export function VmDetailDrawer({
                 <VmActionsMenu
                   vm={vm}
                   effectiveState={effectiveState}
+                  isRestarting={isRestarting}
+                  isPowerActionPending={isPowerActionPending}
                   onPower={onPower}
-                  onClone={onClone}
+                  onDelete={onDelete}
                 />
               </Flex>
             </CardHeader>

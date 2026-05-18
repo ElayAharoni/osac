@@ -15,6 +15,8 @@ import {
   normalizeComputeInstanceTemplate,
   normalizeComputeInstanceTemplatePage,
   serializeComputeInstanceForCreate,
+  serializeComputeInstancePowerPatch,
+  type ComputeInstancePowerAction,
   type SerializeComputeInstanceForCreateOptions,
 } from '@osac/api-contracts'
 import { buildAuthHeaders } from './authToken'
@@ -127,10 +129,29 @@ export async function patchComputeInstance(
   return normalizeComputeInstance(raw)
 }
 
+export async function patchComputeInstancePower(
+  id: string,
+  action: ComputeInstancePowerAction,
+): Promise<ComputeInstance> {
+  const res = await fetch(`${BASE}/compute_instances/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(serializeComputeInstancePowerPatch(action)),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${body || res.statusText}`)
+  }
+  const raw = unwrapFulfillmentObject(await parseJson(res))
+  if (raw == null || typeof raw !== 'object') throw new Error('API: missing object in patch response')
+  return normalizeComputeInstance(raw)
+}
+
 export async function deleteComputeInstance(id: string): Promise<void> {
   const res = await fetch(`${BASE}/compute_instances/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    /** No Content-Type without a body — Fastify rejects empty JSON bodies (FST_ERR_CTP_EMPTY_JSON_BODY). */
+    headers: buildAuthHeaders(),
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
