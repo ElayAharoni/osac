@@ -6,6 +6,7 @@ import {
   normalizeComputeInstancePage,
   protoJsonAnyInt32,
   serializeComputeInstanceForCreate,
+  serializeComputeInstancePowerPatch,
   serializeTemplateParametersWire,
   totalStorageGiBFromSpec,
 } from '@osac/api-contracts'
@@ -73,12 +74,12 @@ describe('normalizeComputeInstance', () => {
     expect(vm.status.conditions?.[0].message).toBe('Scheduling')
   })
 
-  it('maps COMPUTE_INSTANCE_STATE_STOPPING to stopped', () => {
+  it('maps COMPUTE_INSTANCE_STATE_STOPPING to stopping', () => {
     const vm = normalizeComputeInstance({
       ...wireVm,
       status: { ...wireVm.status, state: 'COMPUTE_INSTANCE_STATE_STOPPING' },
     })
-    expect(vm.status.state).toBe('stopped')
+    expect(vm.status.state).toBe('stopping')
   })
 
   it('maps unknown state to error', () => {
@@ -141,7 +142,7 @@ describe('mapFulfillmentComputeStateToVmPower', () => {
     expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_STOPPED')).toBe('stopped')
     expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_PAUSED')).toBe('paused')
     expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_STARTING')).toBe('starting')
-    expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_STOPPING')).toBe('stopped')
+    expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_STOPPING')).toBe('stopping')
     expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_DELETING')).toBe('deleting')
     expect(mapFulfillmentComputeStateToVmPower('COMPUTE_INSTANCE_STATE_ERROR')).toBe('error')
   })
@@ -269,6 +270,28 @@ describe('serializeComputeInstanceForCreate', () => {
     })
     const body = serializeComputeInstanceForCreate(vm, { specTemplateOnly: true })
     expect(body.spec).toBeUndefined()
+  })
+})
+
+describe('serializeComputeInstancePowerPatch', () => {
+  it('stop sends Halted run_strategy and STOPPED state', () => {
+    expect(serializeComputeInstancePowerPatch('stop')).toEqual({
+      spec: { run_strategy: 'Halted' },
+      status: { state: 'COMPUTE_INSTANCE_STATE_STOPPED' },
+    })
+  })
+
+  it('start sends Always run_strategy and RUNNING state', () => {
+    expect(serializeComputeInstancePowerPatch('start')).toEqual({
+      spec: { run_strategy: 'Always' },
+      status: { state: 'COMPUTE_INSTANCE_STATE_RUNNING' },
+    })
+  })
+
+  it('restart sends restart_requested_at', () => {
+    const body = serializeComputeInstancePowerPatch('restart')
+    expect(body.spec).toBeDefined()
+    expect(typeof (body.spec as { restart_requested_at?: string }).restart_requested_at).toBe('string')
   })
 })
 

@@ -1,13 +1,17 @@
 flow: Manage virtual machines
 statechart_ref: ../statecharts/manage-virtual-machines.statechart.yaml
 
+primary_api:
+  list: GET /api/fulfillment/v1/compute_instances
+  patch: PATCH /api/fulfillment/v1/compute_instances/{id}
+  delete: DELETE /api/fulfillment/v1/compute_instances/{id}
+
 rbac:
   required_permissions_by_step:
     mvm_list_view:
       view_vm_list: view_my_vms
       open_create_vm_modal: open_create_vm
       run_power_actions: operate_vm_power
-      start_clone: clone_vm
       open_vm_detail: view_my_vms
     mvm_detail_drawer:
       view_vm_detail: view_my_vms
@@ -21,7 +25,7 @@ steps:
     title: My VMs list
     goal: >-
       View and filter VM instances, switch between grid cards and compact table, open create VM from
-      the header, open detail, and trigger VM lifecycle actions or clone.
+      the header, open detail, and trigger VM lifecycle actions (start, stop, restart, delete).
 
     ui:
       components:
@@ -58,6 +62,17 @@ steps:
     interactions:
       - Read header description: “View and filter instances. Use the layout toggle for grid cards (same style as templates) or a compact table.”
       - Click Create virtual machine in the header-right area to open the create VM wizard (tenant user only).
+      - >-
+        After wizard create, a **placeholder** card/row appears at the **end** of the list with **Creating** (+ spinner),
+        wizard parameters, and no power actions. Visible only when status filter is **All**. Removed when
+        `GET compute_instances` includes the VM (match by create response id, else name). After 30 minutes without
+        list match, badge becomes **Still provisioning**. After the VM appears in the list, a **post-create watch**
+        (`postCreateWatchStore`, survives navigation) keeps **Starting** at the **same list position** until API
+        reports `starting` then `running` (never **Running** before **Starting**). Create POST does not immediately
+        refetch/upsert the list (avoids stale **running**); list polls every **10s** while placeholder or post-create watch is active.
+      - >-
+        **VmStatusLabel** shows a spinner beside transitional badges (`starting`, `stopping`, `restarting`, `deleting`,
+        `creating`, `still_provisioning`); stable states have no spinner.
       - Use the separator-bounded filter row to search by VM name, filter by status (all/running/stopped/paused), and filter by OS.
       - Toggle card versus table layout from the right side of the filter row with compact icon-only controls.
       - >-
@@ -70,7 +85,26 @@ steps:
         normalization — see backend-fulfillment.yaml `compute_instances_wire_format_and_ui.my_vms_surfaces`.
       - Divider, then inline keyed rows for **IP** (`status.ip_address`) and **created** (`metadata.creation_timestamp` normalized).
       - OS icon uses heuristic from **spec.image** / template when demo-only `os` field absent (same heuristic as detail Overview).
-      - Open row or card actions menu with start stop restart clone migrate delete; enablement is state-aware (for example start only when stopped, stop/restart when running or paused).
+      - >-
+        Open row or card actions menu with **start, stop, restart, delete** only. **Clone** and **migrate** are not
+        offered until fulfillment APIs exist (code commented with RESTORE markers in VmActionsMenu).
+        Enablement is state-aware (for example start only when stopped, stop/restart when running or paused).
+      - >-
+        Start and Stop call **PATCH /api/fulfillment/v1/compute_instances/{id}** (`run_strategy` + `status.state`).
+        Power PATCH does **not** immediately refetch or upsert the list (avoids stale terminal state). Pending badges
+        (`vmPowerPendingStore`, survives navigation) reconcile via list GET every **10s** while pending and on
+        `refetchOnMount: always` when returning to My VMs; default list poll remains **30s**.
+      - >-
+        **Restart** — two pending phases: (1) **Restarting** from click until list returns **stopped** (ignore stale **running**);
+        (2) **Starting** pending, **PATCH start**, until list returns **running** or **error**.
+      - >-
+        **Pending power display** — on Start / Stop / Restart click, badge shows **Starting** / **Stopping** / **Restarting**
+        until list GET confirms the transition (ignore premature terminal states). Cleared on PATCH failure.
+      - >-
+        Delete: confirm in a modal; on confirm the list shows **Deleting** (+ spinner) immediately (`usePendingVmDeletes`).
+        If the VM is running or paused, **PATCH stop** first, then **DELETE**. The card is removed when
+        `GET compute_instances` no longer includes that id (not when the server first reports `deleting`).
+        Modal closes on confirm; detail closes if open. List refetches on DELETE success but VM stays visible until absent from list GET.
       - Select VM row or card to replace the list with full-detail layout.
       - Re-select My VMs nav to return from detail to list.
 
@@ -114,7 +148,10 @@ steps:
       - Click My VMs breadcrumb item to return to the list view.
       - Review two-card detail layout: large primary card for tabbed VM properties and smaller right-side console card.
       - Navigate tabs within detail.
-      - Use the console card to view status and launch console; use top-right actions menu (start stop restart clone migrate delete) with state-aware disabled items.
+      - >-
+        Use the console card to view status and launch console; actions menu matches list (start, stop, restart, delete;
+        no clone or migrate).
+      - Delete from detail actions menu follows the same confirm + PATCH stop (when needed) + DELETE contract as the list view.
       - >-
         Overview tab: vCPU/Memory/Storage/Created align with wire-normalized spec + metadata (camelCase in TS after normalize).
       - >-
@@ -161,9 +198,10 @@ transitions:
   - from: mvm_detail_drawer
     action: close detail or navigate back
     to: mvm_list_view
-  - from: mvm_list_view
-    action: choose clone from actions
-    to: cvm_wizard_source_clone
+  # RESTORE when clone from actions is supported:
+  # - from: mvm_list_view
+  #   action: choose clone from actions
+  #   to: cvm_wizard_source_clone
   - from: cvm_wizard_review_create
     action: provision success
     to: mvm_list_view
@@ -177,8 +215,9 @@ transitions:
     action: launch console while running opens new tab with demo query
     to: vcd_console_page
 
-validation_rules:
-  - field: clone_new_name
-    rules:
-      - rule: trim_fallback_to_default_suffix
-        note: Clone path uses trimmed name or falls back to source name plus clone suffix in provisionVmCloneFromModal.
+# RESTORE validation_rules when clone from My VMs actions is supported:
+# validation_rules:
+#   - field: clone_new_name
+#     rules:
+#       - rule: trim_fallback_to_default_suffix
+#         note: Clone path uses trimmed name or falls back to source name plus clone suffix.

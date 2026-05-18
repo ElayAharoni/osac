@@ -90,6 +90,53 @@ describe('BFF mock mode (integration contract)', () => {
     await app.close()
   })
 
+  it('PATCH /api/fulfillment/v1/compute_instances/:id stop updates mock VM state', async () => {
+    const app = await buildApp({ apiMode: 'mock', logger: false })
+    const list = await app.inject({ method: 'GET', url: '/api/fulfillment/v1/compute_instances?limit=1' })
+    const item = (list.json() as { items: Array<{ id: string; status?: { state?: string } }> }).items[0]
+    expect(item?.id).toBeTruthy()
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/api/fulfillment/v1/compute_instances/${encodeURIComponent(item.id)}`,
+      payload: {
+        spec: { run_strategy: 'Halted' },
+        status: { state: 'COMPUTE_INSTANCE_STATE_STOPPED' },
+      },
+    })
+    expect(patch.statusCode).toBe(200)
+    const body = patch.json() as { object: { status: { state: string }; spec: { runStrategy?: string } } }
+    expect(body.object.status.state).toBe('stopped')
+    expect(body.object.spec.runStrategy).toBe('Halted')
+    await app.close()
+  })
+
+  it('DELETE /api/fulfillment/v1/compute_instances/:id removes VM from mock store', async () => {
+    const app = await buildApp({ apiMode: 'mock', logger: false })
+    const list = await app.inject({ method: 'GET', url: '/api/fulfillment/v1/compute_instances?limit=1' })
+    const id = (list.json() as { items: Array<{ id: string }> }).items[0]?.id
+    expect(id).toBeTruthy()
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/fulfillment/v1/compute_instances/${encodeURIComponent(id)}`,
+    })
+    expect(del.statusCode).toBe(200)
+
+    const get = await app.inject({
+      method: 'GET',
+      url: `/api/fulfillment/v1/compute_instances/${encodeURIComponent(id)}`,
+    })
+    expect(get.statusCode).toBe(404)
+
+    const missing = await app.inject({
+      method: 'DELETE',
+      url: '/api/fulfillment/v1/compute_instances/__no_such_vm__',
+    })
+    expect(missing.statusCode).toBe(404)
+    await app.close()
+  })
+
   it('GET /api/events/v1/events returns paginated mock feed', async () => {
     const app = await buildApp({ apiMode: 'mock', logger: false })
     const res = await app.inject({ method: 'GET', url: '/api/events/v1/events?limit=5&offset=0' })

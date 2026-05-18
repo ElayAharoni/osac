@@ -120,7 +120,7 @@ flows:
     file: ui-flows/manage-virtual-machines.yaml
     summary: >-
       My VMs list/cards/table aligned with fulfillment compute_instances wire format after normalization (resources, IP, conditions);
-      filters, detail drawer, power lifecycle, clone, console demo launch.
+      filters, detail drawer, power lifecycle (start/stop/restart/delete; clone/migrate not in menu), console demo launch.
   - id: recent-activities
     file: ui-flows/recent-activities.yaml
     summary: Full-page activity feed from masthead bell (breadcrumb return).

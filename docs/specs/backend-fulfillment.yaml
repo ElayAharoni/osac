@@ -208,7 +208,7 @@ context:
             - COMPUTE_INSTANCE_STATE_STOPPED → stopped
             - COMPUTE_INSTANCE_STATE_PAUSED → paused
             - COMPUTE_INSTANCE_STATE_STARTING → starting
-            - COMPUTE_INSTANCE_STATE_STOPPING → stopped
+            - COMPUTE_INSTANCE_STATE_STOPPING → stopping
             - COMPUTE_INSTANCE_STATE_DELETING → deleting
             - COMPUTE_INSTANCE_STATE_ERROR → error
             - Unknown / unmappable → error (surface distinctly in UI if needed)
@@ -256,6 +256,49 @@ context:
               - status (CONDITION_STATUS_* mapped to True/False/Unknown for display)
               - reason, message
               - last_transition_time (formatted)
+          power_actions:
+            api: PATCH /api/fulfillment/v1/compute_instances/{id}
+            stop:
+              wire: >-
+                Prefer `spec.run_strategy: Halted` and `status.state: COMPUTE_INSTANCE_STATE_STOPPED` in one PATCH
+                (see compute_instances_update example_requests).
+            start:
+              wire: >-
+                `spec.run_strategy: Always` and `status.state: COMPUTE_INSTANCE_STATE_RUNNING` (or upstream-accepted starting state).
+            restart:
+              orchestration: >-
+                **Not** a single `restart_requested_at` PATCH. **PATCH stop** on click; pending **Restarting** until list shows
+                **stopped** (ignore stale **running**). Then pending **Starting**, **PATCH start**, until list shows **running** or **error**.
+            spa:
+              client: patchComputeInstancePower(id, 'start' | 'stop') — serializeComputeInstancePowerPatch in @osac/api-contracts
+              hook: usePatchVm — non-power PATCH upserts list cache + refetch; **powerAction** PATCH does neither (pending UI + polled list)
+              restart: useVmPowerActionDisplay + vmPowerPendingStore — Restarting until stopped, then Starting until running|error
+              pending_display: useVmPowerActionDisplay — session Map vmId → starting|stopping|restarting; list GET every 10s while pending
+              create_pending: usePendingVmCreations + postCreateWatchStore — placeholder Creating, then Starting until starting→running
+              delete_pending: usePendingVmDeletes — Deleting from confirm until VM absent from list GET
+              list_cache: refetchOnMount always for compute_instances; PENDING_VM_LIST_POLL_MS = 10_000
+          unsupported_actions:
+            clone:
+              status: not_implemented
+              note: >-
+                VmActionsMenu Clone item and list/detail onClone handlers are commented (RESTORE markers).
+                Wizard clone path remains spec-only; BFF rejects clone_drawer entry until wired.
+            migrate:
+              status: not_implemented
+              note: VmActionsMenu Migrate item commented; no fulfillment migrate API in scope.
+          delete_action:
+            api: DELETE /api/fulfillment/v1/compute_instances/{id}
+            prerequisite: >-
+              VM MUST be stopped before DELETE. If the UI shows running or paused, the SPA issues **PATCH stop** first,
+              then DELETE on success (same confirm modal; user sees combined progress).
+            enablement: >-
+              Actions menu Delete available when VM is not **deleting** (running/paused/stopped); stop-then-delete is automatic.
+            ux: >-
+              Confirm in a modal naming the VM; on confirm show **Deleting** immediately (`usePendingVmDeletes`);
+              refetch list on DELETE success; remove card when GET list omits id.
+            modes:
+              mock: BFF removes id from vmStore; 404 when unknown id.
+              dev: BFF proxies DELETE to FULFILLMENT_API_URL with same path and Authorization rules as other fulfillment CRUD.
             empty_state: >-
               When conditions array empty or missing, keep “No conditions reported.”
       mock_mode_alignment:
@@ -332,10 +375,18 @@ context:
         - >-
           GET /api/fulfillment/v1/compute_instance_templates page envelope — required once catalog + wizard
           alignment ships (see template-catalog-wizard-api-alignment.yaml); extend mock contract tests accordingly.
+        - >-
+          DELETE /api/fulfillment/v1/compute_instances/{id} — removes mock vmStore entry; 404 when missing;
+          empty object body on success (200).
+        - >-
+          PATCH /api/fulfillment/v1/compute_instances/{id} — power actions update vmStore; returns { object };
+          stop sets run_strategy Halted + COMPUTE_INSTANCE_STATE_STOPPED.
         - GET /api/events/v1/events mock pagination
         - GET /api/osac/public/v1/console/.../access envelope
       dev_proxy_coverage:
         - Upstream URL joins FULFILLMENT_API_URL with request path for fulfillment, events, and osac public prefixes
+        - DELETE /api/fulfillment/v1/compute_instances/{id} forwarded with method, path, and Authorization (same as GET/PATCH)
+        - PATCH /api/fulfillment/v1/compute_instances/{id} forwarded for Start/Stop/Restart power actions
         - Authorization forwarded from client when present (global fetch mocked)
         - TEMP_FULFILLMENT_STATIC_BEARER fills Authorization when client omits token (except GET capabilities); FORCE replaces on non-capabilities routes when env set
         - Empty/malformed Bearer allows static bearer merge on non-capabilities routes
@@ -661,7 +712,10 @@ context:
       description: Operate lifecycle on existing compute instances.
       steps:
         - GET /api/fulfillment/v1/compute_instances with CEL filter for name/state
-        - PATCH /api/fulfillment/v1/compute_instances/{id} with status.runStrategy or spec fields
+        - PATCH /api/fulfillment/v1/compute_instances/{id} for Start and Stop (run_strategy, status.state)
+        - >-
+          Restart — PATCH stop, wait until GET compute_instances shows **stopped**, then PATCH start (SPA orchestrator; see power_actions.restart)
+        - DELETE /api/fulfillment/v1/compute_instances/{id} after stop when needed (confirm modal; PATCH stop then DELETE)
         - GET /api/osac/public/v1/console/COMPUTE_INSTANCE_RESOURCE_TYPE_COMPUTE_INSTANCE/{id}/access
     - name: recent-activities
       description: Stream or poll domain events (SSE/WebSocket mapping depends on gateway).
@@ -1207,10 +1261,21 @@ apis:
       - |
         curl -sS -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
           https://fulfillment.example/api/fulfillment/v1/compute_instances/123 \
-          -d '{"status":{"state":"COMPUTE_INSTANCE_STATE_STOPPED"}}'
+          -d '{"spec":{"run_strategy":"Halted"},"status":{"state":"COMPUTE_INSTANCE_STATE_STOPPED"}}'
+      - |
+        curl -sS -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          https://fulfillment.example/api/fulfillment/v1/compute_instances/123 \
+          -d '{"spec":{"run_strategy":"Always"},"status":{"state":"COMPUTE_INSTANCE_STATE_RUNNING"}}'
+    spa_integration:
+      client: apps/app-frontend/src/api/client.ts — patchComputeInstancePower(id, action)
+      hook: usePatchVm — { id, powerAction: start | stop }; useVmRestartOrchestrator for Restart
+      ui: VmActionsMenu Start/Stop → PATCH; Restart → stop then start when list shows stopped; delete confirm PATCH stop then DELETE
 
   - name: compute_instances_delete
-    description: Delete VM (async deleting state may appear in status).
+    description: >-
+      Delete VM. Fulfillment google.api.http mapping: `delete: "/api/fulfillment/v1/compute_instances/{id}"`.
+      Upstream may transition status to COMPUTE_INSTANCE_STATE_DELETING before removal; demo UI treats
+      successful DELETE as immediate removal from list (mock) or upstream acknowledgment (dev proxy).
     endpoint: /api/fulfillment/v1/compute_instances/{id}
     method: DELETE
     auth:
@@ -1229,6 +1294,17 @@ apis:
         schema:
           type: object
           properties: {}
+      errors:
+        - code: 404_NOT_FOUND
+          description: Unknown compute instance id
+    example_requests:
+      - |
+        curl -sS -X DELETE -H "Authorization: Bearer $TOKEN" \
+          https://fulfillment.example/api/fulfillment/v1/compute_instances/vm-123
+    spa_integration:
+      client: apps/app-frontend/src/api/client.ts — deleteComputeInstance(id)
+      hook: useDeleteVm — invalidates TanStack Query key compute_instances on success
+      ui: manage-virtual-machines — confirm modal; PATCH stop when not stopped, then DELETE
 
   - name: console_get_access
     description: Whether console is available for a compute instance without opening stream.
